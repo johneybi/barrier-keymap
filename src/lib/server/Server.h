@@ -19,6 +19,7 @@
 #pragma once
 
 #include "server/Config.h"
+#include "server/KeyRemapper.h"
 #include "barrier/clipboard_types.h"
 #include "barrier/Clipboard.h"
 #include "barrier/key_types.h"
@@ -419,6 +420,9 @@ private:
 
     // input filter (from m_config);
     InputFilter*        m_inputFilter;
+
+    // remaps keys before relaying them to the active target screen.
+    KeyRemapper        m_keyRemapper;
 
     // clipboard cache
     ClipboardInfo        m_clipboards[kClipboardEnd];

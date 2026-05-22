@@ -31,6 +31,7 @@
 #include "barrier/XBarrier.h"
 #include "barrier/StreamChunker.h"
 #include "barrier/KeyState.h"
+#include "barrier/KeyMap.h"
 #include "barrier/Screen.h"
 #include "barrier/PacketStreamFilter.h"
 #include "net/TCPSocket.h"
@@ -49,6 +50,52 @@
 #include <fstream>
 #include <ctime>
 #include <stdexcept>
+
+namespace {
+
+const char*
+keyScreensForLog(const char* screens)
+{
+	return (screens != NULL) ? screens : "<default>";
+}
+
+std::string
+keyNameForLog(KeyID id)
+{
+	std::string name = barrier::KeyMap::formatKey(id, 0);
+	return name.empty() ? "<none>" : name;
+}
+
+std::string
+modifierMaskForLog(KeyModifierMask mask)
+{
+	std::string name = barrier::KeyMap::formatKey(kKeyNone, mask);
+	return name.empty() ? "<none>" : name;
+}
+
+void
+relayKeyEvents(BaseClientProxy* client, const KeyRemapper::KeyEventList& events)
+{
+	for (KeyRemapper::KeyEventList::const_iterator i = events.begin();
+			i != events.end(); ++i) {
+		switch (i->m_type) {
+		case KeyRemapper::KeyEvent::kDown:
+			client->keyDown(i->m_id, i->m_mask, i->m_button);
+			break;
+
+		case KeyRemapper::KeyEvent::kUp:
+			client->keyUp(i->m_id, i->m_mask, i->m_button);
+			break;
+
+		case KeyRemapper::KeyEvent::kRepeat:
+			client->keyRepeat(i->m_id, i->m_mask, i->m_count, i->m_button);
+			break;
+		}
+	}
+}
+
+}
+
 //
 // Server
 //
@@ -478,12 +525,18 @@ Server::switchScreen(BaseClientProxy* dst,
 	// since that's a waste of time we skip that and just warp the
 	// mouse.
 	if (m_active != dst) {
+		std::string oldActiveName = getName(m_active);
+		std::string dstName = getName(dst);
+
 		// leave active screen
 		if (!m_active->leave()) {
 			// cannot leave screen
 			LOG((CLOG_WARN "can't leave screen"));
 			return;
 		}
+
+		m_keyRemapper.resetPendingScreen(oldActiveName);
+		m_keyRemapper.resetPendingScreen(dstName);
 
 		// update the primary client's clipboards if we're leaving the
 		// primary screen.
@@ -1632,12 +1685,17 @@ void
 Server::onKeyDown(KeyID id, KeyModifierMask mask, KeyButton button,
 				const char* screens)
 {
-	LOG((CLOG_DEBUG1 "onKeyDown id=%d mask=0x%04x button=0x%04x", id, mask, button));
 	assert(m_active != NULL);
+	LOG((CLOG_DEBUG1 "onKeyDown screen=\"%s\" key=%s id=0x%04x mask=%s maskBits=0x%04x button=0x%04x screens=%s broadcast=%s broadcastScreens=%s",
+		getName(m_active).c_str(), keyNameForLog(id).c_str(), id,
+		modifierMaskForLog(mask).c_str(), mask, button, keyScreensForLog(screens),
+		m_keyboardBroadcasting ? "on" : "off", m_keyboardBroadcastingScreens.c_str()));
 
 	// relay
 	if (!m_keyboardBroadcasting && IKeyState::KeyInfo::isDefault(screens)) {
-		m_active->keyDown(id, mask, button);
+		KeyRemapper::KeyEventList events =
+			m_keyRemapper.remapKeyDown(getName(m_active), id, mask, button);
+		relayKeyEvents(m_active, events);
 	}
 	else {
 		if (!screens && m_keyboardBroadcasting) {
@@ -1649,7 +1707,9 @@ Server::onKeyDown(KeyID id, KeyModifierMask mask, KeyButton button,
 		for (ClientList::const_iterator index = m_clients.begin();
 								index != m_clients.end(); ++index) {
 			if (IKeyState::KeyInfo::contains(screens, index->first)) {
-				index->second->keyDown(id, mask, button);
+				KeyRemapper::KeyEventList events =
+					m_keyRemapper.remapKeyDown(index->first, id, mask, button);
+				relayKeyEvents(index->second, events);
 			}
 		}
 	}
@@ -1659,12 +1719,17 @@ void
 Server::onKeyUp(KeyID id, KeyModifierMask mask, KeyButton button,
 				const char* screens)
 {
-	LOG((CLOG_DEBUG1 "onKeyUp id=%d mask=0x%04x button=0x%04x", id, mask, button));
 	assert(m_active != NULL);
+	LOG((CLOG_DEBUG1 "onKeyUp screen=\"%s\" key=%s id=0x%04x mask=%s maskBits=0x%04x button=0x%04x screens=%s broadcast=%s broadcastScreens=%s",
+		getName(m_active).c_str(), keyNameForLog(id).c_str(), id,
+		modifierMaskForLog(mask).c_str(), mask, button, keyScreensForLog(screens),
+		m_keyboardBroadcasting ? "on" : "off", m_keyboardBroadcastingScreens.c_str()));
 
 	// relay
 	if (!m_keyboardBroadcasting && IKeyState::KeyInfo::isDefault(screens)) {
-		m_active->keyUp(id, mask, button);
+		KeyRemapper::KeyEventList events =
+			m_keyRemapper.remapKeyUp(getName(m_active), id, mask, button);
+		relayKeyEvents(m_active, events);
 	}
 	else {
 		if (!screens && m_keyboardBroadcasting) {
@@ -1676,7 +1741,9 @@ Server::onKeyUp(KeyID id, KeyModifierMask mask, KeyButton button,
 		for (ClientList::const_iterator index = m_clients.begin();
 								index != m_clients.end(); ++index) {
 			if (IKeyState::KeyInfo::contains(screens, index->first)) {
-				index->second->keyUp(id, mask, button);
+				KeyRemapper::KeyEventList events =
+					m_keyRemapper.remapKeyUp(index->first, id, mask, button);
+				relayKeyEvents(index->second, events);
 			}
 		}
 	}
@@ -1686,11 +1753,16 @@ void
 Server::onKeyRepeat(KeyID id, KeyModifierMask mask,
 				SInt32 count, KeyButton button)
 {
-	LOG((CLOG_DEBUG1 "onKeyRepeat id=%d mask=0x%04x count=%d button=0x%04x", id, mask, count, button));
 	assert(m_active != NULL);
+	LOG((CLOG_DEBUG1 "onKeyRepeat screen=\"%s\" key=%s id=0x%04x mask=%s maskBits=0x%04x count=%d button=0x%04x broadcast=%s broadcastScreens=%s",
+		getName(m_active).c_str(), keyNameForLog(id).c_str(), id,
+		modifierMaskForLog(mask).c_str(), mask, count, button,
+		m_keyboardBroadcasting ? "on" : "off", m_keyboardBroadcastingScreens.c_str()));
 
 	// relay
-	m_active->keyRepeat(id, mask, count, button);
+	KeyRemapper::KeyEventList events =
+		m_keyRemapper.remapKeyRepeat(getName(m_active), id, mask, count, button);
+	relayKeyEvents(m_active, events);
 }
 
 void
@@ -2137,6 +2209,8 @@ Server::addClient(BaseClientProxy* client)
 bool
 Server::removeClient(BaseClientProxy* client)
 {
+	std::string name = getName(client);
+
 	// return false if not in list
 	ClientSet::iterator i = m_clientSet.find(client);
 	if (i == m_clientSet.end()) {
@@ -2152,7 +2226,8 @@ Server::removeClient(BaseClientProxy* client)
 							client->getEventTarget());
 
 	// remove from list
-	m_clients.erase(getName(client));
+	m_keyRemapper.resetScreen(name);
+	m_clients.erase(name);
 	m_clientSet.erase(i);
 
 	return true;
@@ -2252,6 +2327,9 @@ Server::forceLeaveClient(BaseClientProxy* client)
 	BaseClientProxy* active =
 		(m_activeSaver != NULL) ? m_activeSaver : m_active;
 	if (active == client) {
+		m_keyRemapper.resetScreen(getName(client));
+		m_keyRemapper.resetPendingScreen(getName(m_primaryClient));
+
 		// record new position (center of primary screen)
 		m_primaryClient->getCursorCenter(m_x, m_y);
 
