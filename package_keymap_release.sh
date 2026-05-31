@@ -32,6 +32,7 @@ cp doc/key-remaps.md "$artifact_dir/"
 cp doc/release-checklist.md "$artifact_dir/"
 cp README.md "$artifact_dir/"
 cp LICENSE "$artifact_dir/"
+cp publish_keymap_release.sh "$artifact_dir/"
 
 tar -C "$output_dir" -czf "$output_dir/$artifact_name.tar.gz" "$artifact_name"
 shasum -a 256 "$output_dir/$artifact_name.tar.gz" > "$output_dir/$artifact_name.tar.gz.sha256"
