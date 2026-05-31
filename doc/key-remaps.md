@@ -52,7 +52,9 @@ right_super.alone = hangul
 When the source key is pressed, Barrier holds the event pending. If the key is
 released without another key, Barrier sends the `.alone` key as a tap. If any
 other key arrives first, Barrier sends the `.hold` key down and lets the key act
-as a modifier.
+as a modifier. If no other key arrives within 200 ms, Barrier treats the key as
+a hold and sends the `.hold` key down so long modifier presses do not wait until
+the next key.
 
 If `.hold` is omitted, the source key is used as the hold key. A `.hold` rule
 requires a matching `.alone` rule.
@@ -100,8 +102,7 @@ Chord modifiers use generic names: `shift`, `control`/`ctrl`, `alt`/`option`,
   available for direct key and tap-hold rules, not for `control+space` style
   chord masks.
 - Chord remaps are hotkey taps, not holdable replacement keys.
-- Tap-hold timeout is not implemented yet; pending taps flush when another key
-  or repeat arrives, and are cleared on screen/client reset paths.
+- The tap-hold timeout is currently fixed at 200 ms.
 
 ## Verification
 
