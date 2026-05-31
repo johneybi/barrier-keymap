@@ -94,14 +94,19 @@ private:
 
 	typedef std::map<KeyButton, PressedKey> PressedKeyMap;
 	typedef std::map<KeyButton, PendingTap> PendingTapMap;
+	typedef std::map<KeyButton, KeyID> SuppressedChordMap;
 	typedef std::map<std::string, PressedKeyMap> ScreenPressedKeyMap;
 	typedef std::map<std::string, PendingTapMap> ScreenPendingTapMap;
+	typedef std::map<std::string, SuppressedChordMap> ScreenSuppressedChordMap;
 
 	KeyEvent remapKey(const std::string& screen, KeyID id,
 		KeyModifierMask mask, SInt32 count, KeyButton button,
 		KeyEvent::Type type) const;
 	void flushPendingTaps(const std::string& screen, KeyButton exceptButton,
 		KeyEventList& events);
+	void emitChordTap(const std::string& screen,
+		const KeyRemapConfig::ChordRule& rule, KeyModifierMask mask,
+		KeyButton button, KeyEventList& events) const;
 	KeyModifierMask translateMask(const std::string& screen,
 		KeyModifierMask mask) const;
 	static KeyModifierMask modifierForKey(KeyID id);
@@ -112,4 +117,5 @@ private:
 	KeyRemapConfig m_config;
 	ScreenPressedKeyMap m_pressedKeys;
 	ScreenPendingTapMap m_pendingTaps;
+	ScreenSuppressedChordMap m_suppressedChords;
 };

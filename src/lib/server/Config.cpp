@@ -104,6 +104,54 @@ canonicalRemapKeyName(const std::string& name)
 	return name;
 }
 
+std::string
+canonicalRemapKeystrokeName(const std::string& name)
+{
+	static const std::map<std::string, std::string> s_modifierAliases = {
+		{ "alt", "Alt" },
+		{ "altgr", "AltGr" },
+		{ "control", "Control" },
+		{ "ctrl", "Control" },
+		{ "command", "Super" },
+		{ "cmd", "Super" },
+		{ "meta", "Meta" },
+		{ "option", "Alt" },
+		{ "shift", "Shift" },
+		{ "super", "Super" },
+		{ "win", "Super" },
+		{ "windows", "Super" }
+	};
+
+	std::string canonical;
+	std::string::size_type begin = 0;
+	while (begin <= name.size()) {
+		std::string::size_type end = name.find('+', begin);
+		std::string part = trim(name.substr(begin,
+			end == std::string::npos ? std::string::npos : end - begin));
+		std::string lower = toLower(part);
+		std::map<std::string, std::string>::const_iterator modifier =
+			s_modifierAliases.find(lower);
+		if (modifier != s_modifierAliases.end()) {
+			part = modifier->second;
+		}
+		else {
+			part = canonicalRemapKeyName(part);
+		}
+
+		if (!canonical.empty()) {
+			canonical += "+";
+		}
+		canonical += part;
+
+		if (end == std::string::npos) {
+			break;
+		}
+		begin = end + 1;
+	}
+
+	return canonical;
+}
+
 KeyID
 parseRemapKey(ConfigReadContext& context, const std::string& name)
 {
@@ -119,6 +167,20 @@ parseRemapKey(ConfigReadContext& context, const std::string& name)
 	}
 
 	return key;
+}
+
+void
+parseRemapKeystroke(ConfigReadContext& context, const std::string& name,
+		KeyModifierMask& mask, KeyID& key)
+{
+	std::string canonical = canonicalRemapKeystrokeName(name);
+	if (!barrier::KeyMap::parseModifiers(canonical, mask)) {
+		throw XConfigRead(context,
+			"unable to parse remap key modifiers \"%{1}\"", name);
+	}
+	if (!barrier::KeyMap::parseKey(canonical, key) || key == kKeyNone) {
+		throw XConfigRead(context, "unable to parse remap key \"%{1}\"", name);
+	}
 }
 
 class PendingTapRule {
@@ -1152,8 +1214,12 @@ Config::readSectionRemaps(ConfigReadContext& s)
 {
 	typedef std::pair<std::string, KeyID> TapKey;
 	typedef std::map<TapKey, PendingTapRule> PendingTapRules;
+	typedef std::pair<KeyID, KeyModifierMask> ChordKey;
+	typedef std::pair<std::string, ChordKey> ScreenChordKey;
+	typedef std::map<ScreenChordKey, bool> ChordRules;
 
 	PendingTapRules pendingTapRules;
+	ChordRules chordRules;
 	std::string line;
 	std::string screen;
 	while (s.readLine(line)) {
@@ -1207,11 +1273,32 @@ Config::readSectionRemaps(ConfigReadContext& s)
 			from = from.substr(0, dot);
 		}
 
-		KeyID fromID = parseRemapKey(s, from);
-		KeyID toID = parseRemapKey(s, to);
-		TapKey tapKey(screen, fromID);
-
 		if (suffix.empty()) {
+			if (from.find('+') != std::string::npos) {
+				KeyModifierMask fromMask = 0;
+				KeyID fromID = kKeyNone;
+				KeyModifierMask toMask = 0;
+				KeyID toID = kKeyNone;
+				parseRemapKeystroke(s, from, fromMask, fromID);
+				parseRemapKeystroke(s, to, toMask, toID);
+				if (fromMask == 0) {
+					throw XConfigRead(s,
+						"modifier chord remap requires at least one modifier");
+				}
+
+				ScreenChordKey chordKey(screen, ChordKey(fromID, fromMask));
+				if (chordRules.find(chordKey) != chordRules.end()) {
+					throw XConfigRead(s, "duplicate remap source \"%{1}\"", from);
+				}
+				chordRules[chordKey] = true;
+				m_keyRemapConfig.addChordRule(screen, fromMask, fromID,
+					toMask, toID);
+				continue;
+			}
+
+			KeyID fromID = parseRemapKey(s, from);
+			KeyID toID = parseRemapKey(s, to);
+			TapKey tapKey(screen, fromID);
 			if (m_keyRemapConfig.findRule(screen, fromID) != NULL ||
 				pendingTapRules.find(tapKey) != pendingTapRules.end()) {
 				throw XConfigRead(s, "duplicate remap source \"%{1}\"", from);
@@ -1219,6 +1306,9 @@ Config::readSectionRemaps(ConfigReadContext& s)
 			m_keyRemapConfig.addRule(screen, fromID, toID);
 		}
 		else if (suffix == "alone") {
+			KeyID fromID = parseRemapKey(s, from);
+			KeyID toID = parseRemapKey(s, to);
+			TapKey tapKey(screen, fromID);
 			if (m_keyRemapConfig.findRule(screen, fromID) != NULL) {
 				throw XConfigRead(s, "duplicate remap source \"%{1}\"", from);
 			}
@@ -1230,6 +1320,9 @@ Config::readSectionRemaps(ConfigReadContext& s)
 			rule.m_hasAlone = true;
 		}
 		else if (suffix == "hold") {
+			KeyID fromID = parseRemapKey(s, from);
+			KeyID toID = parseRemapKey(s, to);
+			TapKey tapKey(screen, fromID);
 			if (m_keyRemapConfig.findRule(screen, fromID) != NULL) {
 				throw XConfigRead(s, "duplicate remap source \"%{1}\"", from);
 			}
