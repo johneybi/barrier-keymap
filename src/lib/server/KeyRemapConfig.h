@@ -48,8 +48,22 @@ public:
 		KeyID m_holdID;
 	};
 
+	class ChordRule {
+	public:
+		ChordRule();
+		ChordRule(KeyModifierMask fromMask, KeyID fromID,
+			KeyModifierMask toMask, KeyID toID);
+
+	public:
+		KeyModifierMask  m_fromMask;
+		KeyID            m_fromID;
+		KeyModifierMask  m_toMask;
+		KeyID            m_toID;
+	};
+
 	typedef std::vector<KeyRule> KeyRuleList;
 	typedef std::vector<TapRule> TapRuleList;
+	typedef std::vector<ChordRule> ChordRuleList;
 
 	static KeyRemapConfig makeDefault();
 	static std::string normalizeScreen(const std::string& screen);
@@ -57,10 +71,14 @@ public:
 	void addRule(const std::string& screen, KeyID fromID, KeyID toID);
 	void addTapRule(const std::string& screen, KeyID fromID,
 		KeyID aloneID, KeyID holdID);
+	void addChordRule(const std::string& screen, KeyModifierMask fromMask,
+		KeyID fromID, KeyModifierMask toMask, KeyID toID);
 	void clear();
 
 	const KeyRule* findRule(const std::string& screen, KeyID id) const;
 	const TapRule* findTapRule(const std::string& screen, KeyID id) const;
+	const ChordRule* findChordRule(const std::string& screen,
+		KeyID id, KeyModifierMask mask) const;
 
 	bool empty() const;
 	void write(std::ostream& out) const;
@@ -71,8 +89,10 @@ public:
 private:
 	typedef std::map<std::string, KeyRuleList> ScreenKeyRules;
 	typedef std::map<std::string, TapRuleList> ScreenTapRules;
+	typedef std::map<std::string, ChordRuleList> ScreenChordRules;
 
 private:
 	ScreenKeyRules m_keyRules;
 	ScreenTapRules m_tapRules;
+	ScreenChordRules m_chordRules;
 };

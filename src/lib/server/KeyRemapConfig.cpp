@@ -24,6 +24,30 @@
 #include <cctype>
 #include <ostream>
 
+namespace {
+
+SInt32
+countModifiers(KeyModifierMask mask)
+{
+	SInt32 count = 0;
+	while (mask != 0) {
+		if ((mask & 1u) != 0) {
+			++count;
+		}
+		mask >>= 1;
+	}
+	return count;
+}
+
+KeyModifierMask
+commandModifierMask()
+{
+	return KeyModifierShift | KeyModifierControl | KeyModifierAlt |
+		KeyModifierMeta | KeyModifierSuper | KeyModifierAltGr;
+}
+
+}
+
 KeyRemapConfig::KeyRule::KeyRule() :
 	m_fromID(kKeyNone),
 	m_toID(kKeyNone)
@@ -51,6 +75,23 @@ KeyRemapConfig::TapRule::TapRule(KeyID fromID, KeyID aloneID,
 {
 }
 
+KeyRemapConfig::ChordRule::ChordRule() :
+	m_fromMask(0),
+	m_fromID(kKeyNone),
+	m_toMask(0),
+	m_toID(kKeyNone)
+{
+}
+
+KeyRemapConfig::ChordRule::ChordRule(KeyModifierMask fromMask, KeyID fromID,
+		KeyModifierMask toMask, KeyID toID) :
+	m_fromMask(fromMask),
+	m_fromID(fromID),
+	m_toMask(toMask),
+	m_toID(toID)
+{
+}
+
 bool
 operator==(const KeyRemapConfig::KeyRule& a, const KeyRemapConfig::KeyRule& b)
 {
@@ -65,12 +106,22 @@ operator==(const KeyRemapConfig::TapRule& a, const KeyRemapConfig::TapRule& b)
 		a.m_holdID == b.m_holdID;
 }
 
+bool
+operator==(const KeyRemapConfig::ChordRule& a, const KeyRemapConfig::ChordRule& b)
+{
+	return a.m_fromMask == b.m_fromMask &&
+		a.m_fromID == b.m_fromID &&
+		a.m_toMask == b.m_toMask &&
+		a.m_toID == b.m_toID;
+}
+
 KeyRemapConfig
 KeyRemapConfig::makeDefault()
 {
 	KeyRemapConfig config;
 	config.addRule("mac", kKeyAlt_R, kKeySuper_R);
 	config.addTapRule("mac", kKeySuper_R, kKeyF19, kKeySuper_R);
+	config.addChordRule("mac", KeyModifierControl, ' ', 0, kKeyF19);
 	config.addRule("windows", kKeySuper_L, kKeyControl_L);
 	return config;
 }
@@ -99,10 +150,20 @@ KeyRemapConfig::addTapRule(const std::string& screen, KeyID fromID,
 }
 
 void
+KeyRemapConfig::addChordRule(const std::string& screen,
+		KeyModifierMask fromMask, KeyID fromID,
+		KeyModifierMask toMask, KeyID toID)
+{
+	m_chordRules[normalizeScreen(screen)].push_back(
+		ChordRule(fromMask, fromID, toMask, toID));
+}
+
+void
 KeyRemapConfig::clear()
 {
 	m_keyRules.clear();
 	m_tapRules.clear();
+	m_chordRules.clear();
 }
 
 const KeyRemapConfig::KeyRule*
@@ -143,10 +204,39 @@ KeyRemapConfig::findTapRule(const std::string& screen, KeyID id) const
 	return NULL;
 }
 
+const KeyRemapConfig::ChordRule*
+KeyRemapConfig::findChordRule(const std::string& screen, KeyID id,
+		KeyModifierMask mask) const
+{
+	ScreenChordRules::const_iterator rules =
+		m_chordRules.find(normalizeScreen(screen));
+	if (rules == m_chordRules.end()) {
+		return NULL;
+	}
+
+	const ChordRule* best = NULL;
+	SInt32 bestModifiers = -1;
+	for (ChordRuleList::const_iterator rule = rules->second.begin();
+			rule != rules->second.end(); ++rule) {
+		if (rule->m_fromID != id ||
+			(mask & commandModifierMask()) != rule->m_fromMask) {
+			continue;
+		}
+
+		SInt32 modifiers = countModifiers(rule->m_fromMask);
+		if (modifiers > bestModifiers) {
+			best = &*rule;
+			bestModifiers = modifiers;
+		}
+	}
+
+	return best;
+}
+
 bool
 KeyRemapConfig::empty() const
 {
-	return m_keyRules.empty() && m_tapRules.empty();
+	return m_keyRules.empty() && m_tapRules.empty() && m_chordRules.empty();
 }
 
 void
@@ -171,6 +261,18 @@ KeyRemapConfig::write(std::ostream& out) const
 					<< ".hold = " << barrier::KeyMap::formatKey(rule->m_holdID, 0) << "\n";
 			}
 		}
+
+		ScreenChordRules::const_iterator chordScreen =
+			m_chordRules.find(screen->first);
+		if (chordScreen != m_chordRules.end()) {
+			for (ChordRuleList::const_iterator rule = chordScreen->second.begin();
+					rule != chordScreen->second.end(); ++rule) {
+				out << "\t\t" << barrier::KeyMap::formatKey(rule->m_fromID,
+						rule->m_fromMask)
+					<< " = " << barrier::KeyMap::formatKey(rule->m_toID,
+						rule->m_toMask) << "\n";
+			}
+		}
 	}
 
 	for (ScreenTapRules::const_iterator screen = m_tapRules.begin();
@@ -184,8 +286,25 @@ KeyRemapConfig::write(std::ostream& out) const
 				rule != screen->second.end(); ++rule) {
 			out << "\t\t" << barrier::KeyMap::formatKey(rule->m_fromID, 0)
 				<< ".alone = " << barrier::KeyMap::formatKey(rule->m_aloneID, 0) << "\n";
-			out << "\t\t" << barrier::KeyMap::formatKey(rule->m_fromID, 0)
-				<< ".hold = " << barrier::KeyMap::formatKey(rule->m_holdID, 0) << "\n";
+				out << "\t\t" << barrier::KeyMap::formatKey(rule->m_fromID, 0)
+					<< ".hold = " << barrier::KeyMap::formatKey(rule->m_holdID, 0) << "\n";
+		}
+	}
+
+	for (ScreenChordRules::const_iterator screen = m_chordRules.begin();
+			screen != m_chordRules.end(); ++screen) {
+		if (m_keyRules.find(screen->first) != m_keyRules.end() ||
+			m_tapRules.find(screen->first) != m_tapRules.end()) {
+			continue;
+		}
+
+		out << "\t" << screen->first << ":\n";
+		for (ChordRuleList::const_iterator rule = screen->second.begin();
+				rule != screen->second.end(); ++rule) {
+			out << "\t\t" << barrier::KeyMap::formatKey(rule->m_fromID,
+					rule->m_fromMask)
+				<< " = " << barrier::KeyMap::formatKey(rule->m_toID,
+					rule->m_toMask) << "\n";
 		}
 	}
 }
@@ -193,7 +312,9 @@ KeyRemapConfig::write(std::ostream& out) const
 bool
 KeyRemapConfig::operator==(const KeyRemapConfig& config) const
 {
-	return m_keyRules == config.m_keyRules && m_tapRules == config.m_tapRules;
+	return m_keyRules == config.m_keyRules &&
+		m_tapRules == config.m_tapRules &&
+		m_chordRules == config.m_chordRules;
 }
 
 bool

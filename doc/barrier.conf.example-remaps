@@ -19,6 +19,7 @@ section: remaps
 		right_alt = right_super
 		right_super.alone = F19
 		right_super.hold = right_super
+		control+space = F19
 
 	windows:
 		left_super = left_control
