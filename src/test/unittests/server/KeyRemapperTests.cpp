@@ -106,6 +106,31 @@ TEST(KeyRemapperTests, tapRuleFlushesHoldBeforeChordKey)
 		KeyModifierSuper, kCButton);
 }
 
+TEST(KeyRemapperTests, tapRuleFlushesHoldForTimeout)
+{
+	KeyRemapConfig config;
+	config.addTapRule("mac", kKeySuper_R, kKeyF19, kKeySuper_R);
+
+	KeyRemapper remapper(config);
+	KeyRemapper::KeyEventList pending =
+		remapper.remapKeyDown("mac", kKeySuper_R, KeyModifierSuper,
+			kSuperButton);
+	KeyRemapper::ScreenKeyEventMap timeoutEvents =
+		remapper.flushPendingTapHolds();
+	KeyRemapper::KeyEventList up =
+		remapper.remapKeyUp("mac", kKeySuper_R, KeyModifierSuper,
+			kSuperButton);
+
+	EXPECT_TRUE(pending.empty());
+	ASSERT_EQ(1u, timeoutEvents.size());
+	ASSERT_EQ(1u, timeoutEvents["mac"].size());
+	expectEvent(timeoutEvents["mac"][0], KeyRemapper::KeyEvent::kDown,
+		kKeySuper_R, KeyModifierSuper, kSuperButton);
+	ASSERT_EQ(1u, up.size());
+	expectEvent(up[0], KeyRemapper::KeyEvent::kUp, kKeySuper_R,
+		KeyModifierSuper, kSuperButton);
+}
+
 TEST(KeyRemapperTests, chordRuleTapsTargetAndSuppressesSourceKeyUp)
 {
 	KeyRemapConfig config;

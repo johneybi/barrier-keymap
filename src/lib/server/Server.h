@@ -277,6 +277,12 @@ private:
     // returns true iff the delay switch timer is started
     bool                isSwitchWaitStarted() const;
 
+    // manage tap-hold key remap timeout
+    void                updateKeyRemapTapTimer();
+    void                stopKeyRemapTapTimer();
+    void                relayKeyRemapTapHoldEvents(
+                            const KeyRemapper::ScreenKeyEventMap& events);
+
     // returns the corner (EScreenSwitchCornerMasks) where x,y is on the
     // given client.  corners have the given size.
     UInt32                getCorner(BaseClientProxy*,
@@ -306,6 +312,7 @@ private:
     void                handleScreensaverActivatedEvent(const Event&, void*);
     void                handleScreensaverDeactivatedEvent(const Event&, void*);
     void                handleSwitchWaitTimeout(const Event&, void*);
+    void                handleKeyRemapTapTimeout(const Event&, void*);
     void                handleClientDisconnected(const Event&, void*);
     void                handleClientCloseTimeout(const Event&, void*);
     void                handleSwitchToScreenEvent(const Event&, void*);
@@ -423,6 +430,7 @@ private:
 
     // remaps keys before relaying them to the active target screen.
     KeyRemapper        m_keyRemapper;
+    EventQueueTimer*   m_keyRemapTapTimer;
 
     // clipboard cache
     ClipboardInfo        m_clipboards[kClipboardEnd];

@@ -277,6 +277,29 @@ KeyRemapper::resetPendingScreen(const std::string& screen)
 	m_suppressedChords.erase(normalizedScreen);
 }
 
+bool
+KeyRemapper::hasPendingTaps() const
+{
+	return !m_pendingTaps.empty();
+}
+
+KeyRemapper::ScreenKeyEventMap
+KeyRemapper::flushPendingTapHolds()
+{
+	ScreenKeyEventMap eventsByScreen;
+
+	while (!m_pendingTaps.empty()) {
+		std::string screen = m_pendingTaps.begin()->first;
+		KeyEventList& events = eventsByScreen[screen];
+		flushPendingTaps(screen, 0, events);
+		if (events.empty()) {
+			eventsByScreen.erase(screen);
+		}
+	}
+
+	return eventsByScreen;
+}
+
 KeyRemapper::KeyEvent
 KeyRemapper::remapKey(const std::string& screen, KeyID id,
 		KeyModifierMask mask, SInt32 count, KeyButton button,

@@ -73,6 +73,8 @@ modifierMaskForLog(KeyModifierMask mask)
 	return name.empty() ? "<none>" : name;
 }
 
+const double kKeyRemapTapHoldDelay = 0.20;
+
 void
 relayKeyEvents(BaseClientProxy* client, const KeyRemapper::KeyEventList& events)
 {
@@ -117,6 +119,7 @@ Server::Server(
 	m_config(&config),
 	m_inputFilter(config.getInputFilter()),
 	m_keyRemapper(config.getKeyRemapConfig()),
+	m_keyRemapTapTimer(NULL),
 	m_activeSaver(NULL),
 	m_switchDir(kNoDirection),
 	m_switchScreen(NULL),
@@ -294,6 +297,7 @@ Server::~Server()
 							m_inputFilter);
 	m_events->removeHandler(m_events->forIPrimaryScreen().fakeInputEnd(),
 							m_inputFilter);
+	stopKeyRemapTapTimer();
 	m_events->removeHandler(Event::kTimer, this);
 	stopSwitch();
 
@@ -327,6 +331,7 @@ Server::setConfig(const Config& config)
 	// close clients that are connected but being dropped from the
 	// configuration.
 	closeClients(config);
+	stopKeyRemapTapTimer();
 	m_keyRemapper.setConfig(config.getKeyRemapConfig());
 
 	// cut over
@@ -539,6 +544,7 @@ Server::switchScreen(BaseClientProxy* dst,
 
 		m_keyRemapper.resetPendingScreen(oldActiveName);
 		m_keyRemapper.resetPendingScreen(dstName);
+		updateKeyRemapTapTimer();
 
 		// update the primary client's clipboards if we're leaving the
 		// primary screen.
@@ -1072,6 +1078,46 @@ Server::isSwitchWaitStarted() const
 	return (m_switchWaitTimer != NULL);
 }
 
+void
+Server::updateKeyRemapTapTimer()
+{
+	stopKeyRemapTapTimer();
+
+	if (!m_keyRemapper.hasPendingTaps()) {
+		return;
+	}
+
+	m_keyRemapTapTimer =
+		m_events->newOneShotTimer(kKeyRemapTapHoldDelay, NULL);
+	m_events->adoptHandler(Event::kTimer, m_keyRemapTapTimer,
+							new TMethodEventJob<Server>(this,
+								&Server::handleKeyRemapTapTimeout));
+}
+
+void
+Server::stopKeyRemapTapTimer()
+{
+	if (m_keyRemapTapTimer != NULL) {
+		m_events->removeHandler(Event::kTimer, m_keyRemapTapTimer);
+		m_events->deleteTimer(m_keyRemapTapTimer);
+		m_keyRemapTapTimer = NULL;
+	}
+}
+
+void
+Server::relayKeyRemapTapHoldEvents(
+		const KeyRemapper::ScreenKeyEventMap& events)
+{
+	for (KeyRemapper::ScreenKeyEventMap::const_iterator i = events.begin();
+			i != events.end(); ++i) {
+		ClientList::const_iterator client = m_clients.find(i->first);
+		if (client == m_clients.end()) {
+			continue;
+		}
+		relayKeyEvents(client->second, i->second);
+	}
+}
+
 UInt32
 Server::getCorner(BaseClientProxy* client,
 				SInt32 x, SInt32 y, SInt32 size) const
@@ -1426,6 +1472,19 @@ Server::handleSwitchWaitTimeout(const Event&, void*)
 }
 
 void
+Server::handleKeyRemapTapTimeout(const Event&, void*)
+{
+	EventQueueTimer* timer = m_keyRemapTapTimer;
+	if (timer != NULL) {
+		m_keyRemapTapTimer = NULL;
+		m_events->removeHandler(Event::kTimer, timer);
+		m_events->deleteTimer(timer);
+	}
+
+	relayKeyRemapTapHoldEvents(m_keyRemapper.flushPendingTapHolds());
+}
+
+void
 Server::handleClientDisconnected(const Event&, void* vclient)
 {
 	// client has disconnected.  it might be an old client or an
@@ -1698,6 +1757,7 @@ Server::onKeyDown(KeyID id, KeyModifierMask mask, KeyButton button,
 		KeyRemapper::KeyEventList events =
 			m_keyRemapper.remapKeyDown(getName(m_active), id, mask, button);
 		relayKeyEvents(m_active, events);
+		updateKeyRemapTapTimer();
 	}
 	else {
 		if (!screens && m_keyboardBroadcasting) {
@@ -1714,6 +1774,7 @@ Server::onKeyDown(KeyID id, KeyModifierMask mask, KeyButton button,
 				relayKeyEvents(index->second, events);
 			}
 		}
+		updateKeyRemapTapTimer();
 	}
 }
 
@@ -1732,6 +1793,7 @@ Server::onKeyUp(KeyID id, KeyModifierMask mask, KeyButton button,
 		KeyRemapper::KeyEventList events =
 			m_keyRemapper.remapKeyUp(getName(m_active), id, mask, button);
 		relayKeyEvents(m_active, events);
+		updateKeyRemapTapTimer();
 	}
 	else {
 		if (!screens && m_keyboardBroadcasting) {
@@ -1748,6 +1810,7 @@ Server::onKeyUp(KeyID id, KeyModifierMask mask, KeyButton button,
 				relayKeyEvents(index->second, events);
 			}
 		}
+		updateKeyRemapTapTimer();
 	}
 }
 
@@ -1765,6 +1828,7 @@ Server::onKeyRepeat(KeyID id, KeyModifierMask mask,
 	KeyRemapper::KeyEventList events =
 		m_keyRemapper.remapKeyRepeat(getName(m_active), id, mask, count, button);
 	relayKeyEvents(m_active, events);
+	updateKeyRemapTapTimer();
 }
 
 void
@@ -2229,6 +2293,7 @@ Server::removeClient(BaseClientProxy* client)
 
 	// remove from list
 	m_keyRemapper.resetScreen(name);
+	updateKeyRemapTapTimer();
 	m_clients.erase(name);
 	m_clientSet.erase(i);
 
@@ -2331,6 +2396,7 @@ Server::forceLeaveClient(BaseClientProxy* client)
 	if (active == client) {
 		m_keyRemapper.resetScreen(getName(client));
 		m_keyRemapper.resetPendingScreen(getName(m_primaryClient));
+		updateKeyRemapTapTimer();
 
 		// record new position (center of primary screen)
 		m_primaryClient->getCursorCenter(m_x, m_y);

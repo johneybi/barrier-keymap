@@ -47,6 +47,7 @@ public:
 	};
 
 	typedef std::vector<KeyEvent> KeyEventList;
+	typedef std::map<std::string, KeyEventList> ScreenKeyEventMap;
 
 	KeyRemapper();
 	explicit KeyRemapper(const KeyRemapConfig& config);
@@ -63,6 +64,8 @@ public:
 	void resetScreen(const std::string& screen);
 	void resetPending();
 	void resetPendingScreen(const std::string& screen);
+	bool hasPendingTaps() const;
+	ScreenKeyEventMap flushPendingTapHolds();
 
 private:
 	class PressedKey {
