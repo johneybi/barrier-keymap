@@ -40,7 +40,7 @@ maskName(KeyModifierMask mask)
 }
 
 KeyRemapper::KeyRemapper() :
-	m_config(KeyRemapConfig::makeDefault())
+	m_config()
 {
 }
 

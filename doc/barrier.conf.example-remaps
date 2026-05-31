@@ -1,0 +1,28 @@
+section: screens
+	server:
+	mac:
+	windows:
+end
+
+section: links
+	server:
+		right = mac
+		left = windows
+	mac:
+		left = server
+	windows:
+		right = server
+end
+
+section: remaps
+	mac:
+		right_alt = right_super
+		right_super.alone = F19
+		right_super.hold = right_super
+
+	windows:
+		left_super = left_control
+end
+
+section: options
+end

@@ -116,6 +116,7 @@ Server::Server(
 	m_yDelta2(0),
 	m_config(&config),
 	m_inputFilter(config.getInputFilter()),
+	m_keyRemapper(config.getKeyRemapConfig()),
 	m_activeSaver(NULL),
 	m_switchDir(kNoDirection),
 	m_switchScreen(NULL),
@@ -326,6 +327,7 @@ Server::setConfig(const Config& config)
 	// close clients that are connected but being dropped from the
 	// configuration.
 	closeClients(config);
+	m_keyRemapper.setConfig(config.getKeyRemapConfig());
 
 	// cut over
 	processOptions();

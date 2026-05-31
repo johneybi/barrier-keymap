@@ -20,6 +20,7 @@
 
 #include "barrier/key_types.h"
 
+#include <iosfwd>
 #include <map>
 #include <string>
 #include <vector>
@@ -60,6 +61,12 @@ public:
 
 	const KeyRule* findRule(const std::string& screen, KeyID id) const;
 	const TapRule* findTapRule(const std::string& screen, KeyID id) const;
+
+	bool empty() const;
+	void write(std::ostream& out) const;
+
+	bool operator==(const KeyRemapConfig& config) const;
+	bool operator!=(const KeyRemapConfig& config) const;
 
 private:
 	typedef std::map<std::string, KeyRuleList> ScreenKeyRules;
