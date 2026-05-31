@@ -23,6 +23,9 @@ cmake -S . -B /tmp/barrier-keymap-tests \
 
 cmake --build /tmp/barrier-keymap-tests --target unittests
 /tmp/barrier-keymap-tests/bin/unittests
+
+cmake --build /tmp/barrier-keymap-build --target barriers barrierc
+./package_keymap_release.sh /tmp/barrier-keymap-build barrier-keymap-local /tmp/barrier-keymap-release
 ```
 
 ## Publish
