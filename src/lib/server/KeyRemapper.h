@@ -18,6 +18,7 @@
 
 #pragma once
 
+#include "server/KeyRemapConfig.h"
 #include "barrier/key_types.h"
 
 #include <map>
@@ -47,6 +48,9 @@ public:
 
 	typedef std::vector<KeyEvent> KeyEventList;
 
+	KeyRemapper();
+	explicit KeyRemapper(const KeyRemapConfig& config);
+
 	KeyEventList remapKeyDown(const std::string& screen, KeyID id,
 		KeyModifierMask mask, KeyButton button);
 	KeyEventList remapKeyUp(const std::string& screen, KeyID id,
@@ -54,33 +58,13 @@ public:
 	KeyEventList remapKeyRepeat(const std::string& screen, KeyID id,
 		KeyModifierMask mask, SInt32 count, KeyButton button);
 
+	void setConfig(const KeyRemapConfig& config);
 	void reset();
 	void resetScreen(const std::string& screen);
 	void resetPending();
 	void resetPendingScreen(const std::string& screen);
 
 private:
-	class Rule {
-	public:
-		Rule(KeyID fromID, KeyID toID);
-
-	public:
-		KeyID            m_fromID;
-		KeyID            m_toID;
-		KeyModifierMask  m_fromModifier;
-		KeyModifierMask  m_toModifier;
-	};
-
-	class TapRule {
-	public:
-		TapRule(KeyID fromID, KeyID aloneID, KeyID holdID);
-
-	public:
-		KeyID m_fromID;
-		KeyID m_aloneID;
-		KeyID m_holdID;
-	};
-
 	class PressedKey {
 	public:
 		PressedKey();
@@ -120,14 +104,12 @@ private:
 		KeyEventList& events);
 	KeyModifierMask translateMask(const std::string& screen,
 		KeyModifierMask mask) const;
-	const Rule* findRule(const std::string& screen, KeyID id) const;
-	const TapRule* findTapRule(const std::string& screen, KeyID id) const;
 	static KeyModifierMask modifierForKey(KeyID id);
-	static std::string normalizeScreen(const std::string& screen);
 	static void logRemap(const char* eventName, const std::string& screen,
 		const KeyEvent& before, const KeyEvent& after);
 
 private:
+	KeyRemapConfig m_config;
 	ScreenPressedKeyMap m_pressedKeys;
 	ScreenPendingTapMap m_pendingTaps;
 };

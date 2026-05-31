@@ -21,9 +21,6 @@
 #include "barrier/KeyMap.h"
 #include "base/Log.h"
 
-#include <algorithm>
-#include <cctype>
-
 namespace {
 
 std::string
@@ -42,6 +39,16 @@ maskName(KeyModifierMask mask)
 
 }
 
+KeyRemapper::KeyRemapper() :
+	m_config(KeyRemapConfig::makeDefault())
+{
+}
+
+KeyRemapper::KeyRemapper(const KeyRemapConfig& config) :
+	m_config(config)
+{
+}
+
 KeyRemapper::KeyEvent::KeyEvent(Type type, KeyID id, KeyModifierMask mask,
 		KeyButton button, SInt32 count) :
 	m_type(type),
@@ -49,21 +56,6 @@ KeyRemapper::KeyEvent::KeyEvent(Type type, KeyID id, KeyModifierMask mask,
 	m_mask(mask),
 	m_button(button),
 	m_count(count)
-{
-}
-
-KeyRemapper::Rule::Rule(KeyID fromID, KeyID toID) :
-	m_fromID(fromID),
-	m_toID(toID),
-	m_fromModifier(modifierForKey(fromID)),
-	m_toModifier(modifierForKey(toID))
-{
-}
-
-KeyRemapper::TapRule::TapRule(KeyID fromID, KeyID aloneID, KeyID holdID) :
-	m_fromID(fromID),
-	m_aloneID(aloneID),
-	m_holdID(holdID)
 {
 }
 
@@ -110,10 +102,11 @@ KeyRemapper::remapKeyDown(const std::string& screen, KeyID id,
 {
 	KeyEvent before(KeyEvent::kDown, id, mask, button);
 	KeyEventList events;
-	std::string normalizedScreen = normalizeScreen(screen);
+	std::string normalizedScreen = KeyRemapConfig::normalizeScreen(screen);
 	flushPendingTaps(normalizedScreen, button, events);
 
-	const TapRule* tapRule = findTapRule(normalizedScreen, id);
+	const KeyRemapConfig::TapRule* tapRule =
+		m_config.findTapRule(normalizedScreen, id);
 	if (tapRule != NULL) {
 		m_pendingTaps[normalizedScreen][button] =
 			PendingTap(tapRule->m_fromID, tapRule->m_aloneID,
@@ -125,7 +118,8 @@ KeyRemapper::remapKeyDown(const std::string& screen, KeyID id,
 		return events;
 	}
 
-	const Rule* rule = findRule(normalizedScreen, id);
+	const KeyRemapConfig::KeyRule* rule =
+		m_config.findRule(normalizedScreen, id);
 	if (rule != NULL) {
 		m_pressedKeys[normalizedScreen][button] =
 			PressedKey(rule->m_fromID, rule->m_toID);
@@ -147,7 +141,7 @@ KeyRemapper::remapKeyUp(const std::string& screen, KeyID id,
 {
 	KeyEvent before(KeyEvent::kUp, id, mask, button);
 	KeyEventList events;
-	std::string normalizedScreen = normalizeScreen(screen);
+	std::string normalizedScreen = KeyRemapConfig::normalizeScreen(screen);
 
 	ScreenPendingTapMap::iterator pendingScreen =
 		m_pendingTaps.find(normalizedScreen);
@@ -193,7 +187,7 @@ KeyRemapper::remapKeyRepeat(const std::string& screen, KeyID id,
 {
 	KeyEvent before(KeyEvent::kRepeat, id, mask, button, count);
 	KeyEventList events;
-	std::string normalizedScreen = normalizeScreen(screen);
+	std::string normalizedScreen = KeyRemapConfig::normalizeScreen(screen);
 	flushPendingTaps(normalizedScreen, 0, events);
 
 	KeyEvent after = remapKey(normalizedScreen, id, mask, count, button,
@@ -201,6 +195,13 @@ KeyRemapper::remapKeyRepeat(const std::string& screen, KeyID id,
 	logRemap("repeat", screen, before, after);
 	events.push_back(after);
 	return events;
+}
+
+void
+KeyRemapper::setConfig(const KeyRemapConfig& config)
+{
+	m_config = config;
+	reset();
 }
 
 void
@@ -213,7 +214,7 @@ KeyRemapper::reset()
 void
 KeyRemapper::resetScreen(const std::string& screen)
 {
-	std::string normalizedScreen = normalizeScreen(screen);
+	std::string normalizedScreen = KeyRemapConfig::normalizeScreen(screen);
 	m_pressedKeys.erase(normalizedScreen);
 	m_pendingTaps.erase(normalizedScreen);
 }
@@ -227,7 +228,7 @@ KeyRemapper::resetPending()
 void
 KeyRemapper::resetPendingScreen(const std::string& screen)
 {
-	m_pendingTaps.erase(normalizeScreen(screen));
+	m_pendingTaps.erase(KeyRemapConfig::normalizeScreen(screen));
 }
 
 KeyRemapper::KeyEvent
@@ -246,7 +247,7 @@ KeyRemapper::remapKey(const std::string& screen, KeyID id,
 	}
 
 	if (remappedID == id) {
-		const Rule* rule = findRule(screen, id);
+		const KeyRemapConfig::KeyRule* rule = m_config.findRule(screen, id);
 		if (rule != NULL) {
 			remappedID = rule->m_toID;
 		}
@@ -328,65 +329,6 @@ KeyRemapper::translateMask(const std::string& screen, KeyModifierMask mask) cons
 	return translated;
 }
 
-const KeyRemapper::Rule*
-KeyRemapper::findRule(const std::string& screen, KeyID id) const
-{
-	static const Rule s_macRules[] = {
-		Rule(kKeyAlt_R, kKeySuper_R),
-		Rule(kKeyNone, kKeyNone)
-	};
-	static const Rule s_windowsRules[] = {
-		Rule(kKeySuper_L, kKeyControl_L),
-		Rule(kKeyNone, kKeyNone)
-	};
-
-	const Rule* rules = NULL;
-	if (screen == "mac") {
-		rules = s_macRules;
-	}
-	else if (screen == "windows") {
-		rules = s_windowsRules;
-	}
-
-	if (rules == NULL) {
-		return NULL;
-	}
-
-	for (const Rule* rule = rules; rule->m_fromID != kKeyNone; ++rule) {
-		if (rule->m_fromID == id) {
-			return rule;
-		}
-	}
-
-	return NULL;
-}
-
-const KeyRemapper::TapRule*
-KeyRemapper::findTapRule(const std::string& screen, KeyID id) const
-{
-	static const TapRule s_macTapRules[] = {
-		TapRule(kKeySuper_R, kKeyF19, kKeySuper_R),
-		TapRule(kKeyNone, kKeyNone, kKeyNone)
-	};
-
-	const TapRule* rules = NULL;
-	if (screen == "mac") {
-		rules = s_macTapRules;
-	}
-
-	if (rules == NULL) {
-		return NULL;
-	}
-
-	for (const TapRule* rule = rules; rule->m_fromID != kKeyNone; ++rule) {
-		if (rule->m_fromID == id) {
-			return rule;
-		}
-	}
-
-	return NULL;
-}
-
 KeyModifierMask
 KeyRemapper::modifierForKey(KeyID id)
 {
@@ -417,15 +359,6 @@ KeyRemapper::modifierForKey(KeyID id)
 	default:
 		return 0;
 	}
-}
-
-std::string
-KeyRemapper::normalizeScreen(const std::string& screen)
-{
-	std::string normalized(screen);
-	std::transform(normalized.begin(), normalized.end(), normalized.begin(),
-		[](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-	return normalized;
 }
 
 void
