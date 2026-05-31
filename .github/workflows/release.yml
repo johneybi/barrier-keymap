@@ -1,0 +1,77 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "keymap-v*"
+  workflow_dispatch:
+
+jobs:
+  package-cli:
+    name: Package ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact: barrier-keymap-linux-x64
+          - os: macos-latest
+            artifact: barrier-keymap-macos
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libavahi-compat-libdnssd-dev \
+            libcurl4-openssl-dev \
+            libssl-dev \
+            libx11-dev \
+            libxext-dev \
+            libxi-dev \
+            libxinerama-dev \
+            libxrandr-dev \
+            libxtst-dev \
+            pkg-config
+
+      - name: Install macOS dependencies
+        if: runner.os == 'macOS'
+        run: brew install openssl
+
+      - name: Configure
+        run: |
+          cmake -S . -B build \
+            -DBARRIER_BUILD_GUI=OFF \
+            -DBARRIER_BUILD_TESTS=OFF \
+            -DBARRIER_BUILD_INSTALLER=OFF \
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+
+      - name: Build command line binaries
+        run: cmake --build build --target barriers barrierc --parallel
+
+      - name: Assemble archive
+        run: |
+          mkdir -p "dist/${{ matrix.artifact }}"
+          cp build/bin/barriers "dist/${{ matrix.artifact }}/"
+          cp build/bin/barrierc "dist/${{ matrix.artifact }}/"
+          cp doc/barrier.conf.example-remaps "dist/${{ matrix.artifact }}/"
+          cp doc/key-remaps.md "dist/${{ matrix.artifact }}/"
+          cp LICENSE "dist/${{ matrix.artifact }}/"
+          tar -C dist -czf "dist/${{ matrix.artifact }}.tar.gz" "${{ matrix.artifact }}"
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: dist/${{ matrix.artifact }}.tar.gz
+
+      - name: Upload GitHub release asset
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/${{ matrix.artifact }}.tar.gz

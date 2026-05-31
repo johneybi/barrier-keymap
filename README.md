@@ -1,6 +1,12 @@
 # Barrier
 
 Eliminate the barrier between your machines.
+
+This fork adds experimental server-side key remapping so the Barrier server can
+translate selected key events before they are sent to a target screen. See
+[server-side key remaps](doc/key-remaps.md) for the supported config subset,
+examples, and verification commands.
+
 Find [releases for windows and macOS here](https://github.com/debauchee/barrier/releases).
 Your distro probably already has barrier packaged for it, see [distro specific packages](#distro-specific-packages)
 below for a list. Alternatively, we also provide a [flatpak](https://github.com/flathub/com.github.debauchee.barrier)
