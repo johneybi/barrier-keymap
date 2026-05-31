@@ -52,5 +52,5 @@ jobs:
       - name: Build server and unit tests
         run: cmake --build build --target barriers unittests --parallel
 
-      - name: Run key remapper tests
-        run: ./build/bin/unittests '--gtest_filter=KeyRemapperTests.*'
+      - name: Run unit tests
+        run: ./build/bin/unittests

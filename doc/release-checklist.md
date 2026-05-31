@@ -22,13 +22,8 @@ cmake -S . -B /tmp/barrier-keymap-tests \
   -DCMAKE_POLICY_VERSION_MINIMUM=3.5
 
 cmake --build /tmp/barrier-keymap-tests --target unittests
-/tmp/barrier-keymap-tests/bin/unittests '--gtest_filter=KeyRemapperTests.*'
+/tmp/barrier-keymap-tests/bin/unittests
 ```
-
-Full `unittests` may fail on some current OpenSSL versions because the existing
-`SecureUtilsTest` fixture expects older fingerprint/random-art output. Treat
-`KeyRemapperTests.*` plus a successful `barriers` build as the keymap gate until
-that upstream test fixture is updated.
 
 ## Publish
 

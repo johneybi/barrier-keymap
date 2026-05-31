@@ -123,7 +123,7 @@ cmake -S . -B /tmp/barrier-keymap-tests \
   -DCMAKE_POLICY_VERSION_MINIMUM=3.5
 
 cmake --build /tmp/barrier-keymap-tests --target unittests
-/tmp/barrier-keymap-tests/bin/unittests '--gtest_filter=KeyRemapperTests.*'
+/tmp/barrier-keymap-tests/bin/unittests
 ```
 
 On macOS, a sandboxed terminal may fail after configuration parsing because
