@@ -105,6 +105,21 @@ KeyRemapper::remapKeyDown(const std::string& screen, KeyID id,
 	std::string normalizedScreen = KeyRemapConfig::normalizeScreen(screen);
 	flushPendingTaps(normalizedScreen, button, events);
 
+	KeyModifierMask translatedMask = translateMask(normalizedScreen, mask);
+	const KeyRemapConfig::ChordRule* chordRule =
+		m_config.findChordRule(normalizedScreen, id, translatedMask);
+	if (chordRule != NULL) {
+		emitChordTap(normalizedScreen, *chordRule, translatedMask, button, events);
+		m_suppressedChords[normalizedScreen][button] = id;
+		LOG((CLOG_DEBUG1 "key remap chord screen=\"%s\" key=%s->%s mask=%s->%s button=0x%04x",
+			screen.c_str(),
+			keyName(chordRule->m_fromID).c_str(),
+			keyName(chordRule->m_toID).c_str(),
+			maskName(chordRule->m_fromMask).c_str(),
+			maskName(chordRule->m_toMask).c_str(), button));
+		return events;
+	}
+
 	const KeyRemapConfig::TapRule* tapRule =
 		m_config.findTapRule(normalizedScreen, id);
 	if (tapRule != NULL) {
@@ -142,6 +157,22 @@ KeyRemapper::remapKeyUp(const std::string& screen, KeyID id,
 	KeyEvent before(KeyEvent::kUp, id, mask, button);
 	KeyEventList events;
 	std::string normalizedScreen = KeyRemapConfig::normalizeScreen(screen);
+
+	ScreenSuppressedChordMap::iterator suppressedScreen =
+		m_suppressedChords.find(normalizedScreen);
+	if (suppressedScreen != m_suppressedChords.end()) {
+		SuppressedChordMap::iterator suppressed =
+			suppressedScreen->second.find(button);
+		if (suppressed != suppressedScreen->second.end()) {
+			LOG((CLOG_DEBUG1 "key remap suppress chord up screen=\"%s\" key=%s button=0x%04x",
+				screen.c_str(), keyName(suppressed->second).c_str(), button));
+			suppressedScreen->second.erase(suppressed);
+			if (suppressedScreen->second.empty()) {
+				m_suppressedChords.erase(suppressedScreen);
+			}
+			return events;
+		}
+	}
 
 	ScreenPendingTapMap::iterator pendingScreen =
 		m_pendingTaps.find(normalizedScreen);
@@ -188,6 +219,16 @@ KeyRemapper::remapKeyRepeat(const std::string& screen, KeyID id,
 	KeyEvent before(KeyEvent::kRepeat, id, mask, button, count);
 	KeyEventList events;
 	std::string normalizedScreen = KeyRemapConfig::normalizeScreen(screen);
+
+	ScreenSuppressedChordMap::const_iterator suppressedScreen =
+		m_suppressedChords.find(normalizedScreen);
+	if (suppressedScreen != m_suppressedChords.end() &&
+		suppressedScreen->second.find(button) != suppressedScreen->second.end()) {
+		LOG((CLOG_DEBUG1 "key remap suppress chord repeat screen=\"%s\" key=%s button=0x%04x",
+			screen.c_str(), keyName(id).c_str(), button));
+		return events;
+	}
+
 	flushPendingTaps(normalizedScreen, 0, events);
 
 	KeyEvent after = remapKey(normalizedScreen, id, mask, count, button,
@@ -209,6 +250,7 @@ KeyRemapper::reset()
 {
 	m_pressedKeys.clear();
 	m_pendingTaps.clear();
+	m_suppressedChords.clear();
 }
 
 void
@@ -217,18 +259,22 @@ KeyRemapper::resetScreen(const std::string& screen)
 	std::string normalizedScreen = KeyRemapConfig::normalizeScreen(screen);
 	m_pressedKeys.erase(normalizedScreen);
 	m_pendingTaps.erase(normalizedScreen);
+	m_suppressedChords.erase(normalizedScreen);
 }
 
 void
 KeyRemapper::resetPending()
 {
 	m_pendingTaps.clear();
+	m_suppressedChords.clear();
 }
 
 void
 KeyRemapper::resetPendingScreen(const std::string& screen)
 {
-	m_pendingTaps.erase(KeyRemapConfig::normalizeScreen(screen));
+	std::string normalizedScreen = KeyRemapConfig::normalizeScreen(screen);
+	m_pendingTaps.erase(normalizedScreen);
+	m_suppressedChords.erase(normalizedScreen);
 }
 
 KeyRemapper::KeyEvent
@@ -254,6 +300,41 @@ KeyRemapper::remapKey(const std::string& screen, KeyID id,
 	}
 
 	return KeyEvent(type, remappedID, translateMask(screen, mask), button, count);
+}
+
+void
+KeyRemapper::emitChordTap(const std::string& screen,
+		const KeyRemapConfig::ChordRule& rule, KeyModifierMask mask,
+		KeyButton button, KeyEventList& events) const
+{
+	KeyModifierMask releaseMask = mask & ~rule.m_toMask;
+	KeyModifierMask currentMask = mask;
+	KeyEventList restoreEvents;
+
+	ScreenPressedKeyMap::const_iterator screenIndex = m_pressedKeys.find(screen);
+	if (screenIndex != m_pressedKeys.end()) {
+		for (PressedKeyMap::const_iterator i = screenIndex->second.begin();
+				i != screenIndex->second.end(); ++i) {
+			const PressedKey& key = i->second;
+			if (key.m_remappedModifier == 0 ||
+				(key.m_remappedModifier & releaseMask) == 0) {
+				continue;
+			}
+
+			currentMask &= ~key.m_remappedModifier;
+			events.push_back(KeyEvent(KeyEvent::kUp, key.m_remappedID,
+				currentMask, i->first));
+			restoreEvents.insert(restoreEvents.begin(),
+				KeyEvent(KeyEvent::kDown, key.m_remappedID,
+					currentMask | key.m_remappedModifier, i->first));
+		}
+	}
+
+	events.push_back(KeyEvent(KeyEvent::kDown, rule.m_toID,
+		rule.m_toMask, button));
+	events.push_back(KeyEvent(KeyEvent::kUp, rule.m_toID,
+		rule.m_toMask, button));
+	events.insert(events.end(), restoreEvents.begin(), restoreEvents.end());
 }
 
 void
