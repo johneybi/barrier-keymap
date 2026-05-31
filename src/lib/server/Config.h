@@ -19,6 +19,7 @@
 #pragma once
 
 #include "server/InputFilter.h"
+#include "server/KeyRemapConfig.h"
 #include "barrier/option_types.h"
 #include "barrier/protocol_types.h"
 #include "barrier/IPlatformScreen.h"
@@ -391,6 +392,9 @@ public:
     */
     const ScreenOptions* getOptions(const std::string& name) const;
 
+    //! Get key remap configuration
+    const KeyRemapConfig& getKeyRemapConfig() const;
+
     //! Check for lock to screen action
     /*!
     Returns \c true if this configuration has a lock to screen action.
@@ -444,6 +448,7 @@ private:
     void                readSectionScreens(ConfigReadContext&);
     void                readSectionLinks(ConfigReadContext&);
     void                readSectionAliases(ConfigReadContext&);
+    void                readSectionRemaps(ConfigReadContext&);
 
     InputFilter::Condition* parseCondition(ConfigReadContext&, const std::string& condition,
                                            const std::vector<std::string>& args);
@@ -462,6 +467,7 @@ private:
     NetworkAddress        m_barrierAddress;
     ScreenOptions        m_globalOptions;
     InputFilter            m_inputFilter;
+    KeyRemapConfig        m_keyRemapConfig;
     bool                m_hasLockToScreenAction;
     IEventQueue*        m_events;
 };
