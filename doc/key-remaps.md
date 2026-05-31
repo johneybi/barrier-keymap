@@ -19,6 +19,7 @@ section: remaps
 
   windows:
     left_super = left_control
+    right_super.alone = hangul
 end
 ```
 
@@ -42,6 +43,12 @@ right_super.alone = F19
 right_super.hold = right_super
 ```
 
+or:
+
+```text
+right_super.alone = hangul
+```
+
 When the source key is pressed, Barrier holds the event pending. If the key is
 released without another key, Barrier sends the `.alone` key as a tap. If any
 other key arrives first, Barrier sends the `.hold` key down and lets the key act
@@ -49,6 +56,9 @@ as a modifier.
 
 If `.hold` is omitted, the source key is used as the hold key. A `.hold` rule
 requires a matching `.alone` rule.
+
+The Windows example maps a right Super tap to `Hangul`, while keeping right
+Super usable as a normal modifier when it is combined with another key.
 
 ### Modifier chord remap
 

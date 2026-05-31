@@ -6,6 +6,9 @@ on:
       - "keymap-v*"
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   package-cli:
     name: Package ${{ matrix.os }}
@@ -61,17 +64,24 @@ jobs:
           cp build/bin/barrierc "dist/${{ matrix.artifact }}/"
           cp doc/barrier.conf.example-remaps "dist/${{ matrix.artifact }}/"
           cp doc/key-remaps.md "dist/${{ matrix.artifact }}/"
+          cp doc/release-checklist.md "dist/${{ matrix.artifact }}/"
+          cp README.md "dist/${{ matrix.artifact }}/"
           cp LICENSE "dist/${{ matrix.artifact }}/"
           tar -C dist -czf "dist/${{ matrix.artifact }}.tar.gz" "${{ matrix.artifact }}"
+          shasum -a 256 "dist/${{ matrix.artifact }}.tar.gz" > "dist/${{ matrix.artifact }}.tar.gz.sha256"
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
-          path: dist/${{ matrix.artifact }}.tar.gz
+          path: |
+            dist/${{ matrix.artifact }}.tar.gz
+            dist/${{ matrix.artifact }}.tar.gz.sha256
 
       - name: Upload GitHub release asset
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/${{ matrix.artifact }}.tar.gz
+          files: |
+            dist/${{ matrix.artifact }}.tar.gz
+            dist/${{ matrix.artifact }}.tar.gz.sha256

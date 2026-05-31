@@ -185,3 +185,26 @@ TEST(KeyRemapperTests, configReadsChordRulesFromRemapsSection)
 	EXPECT_EQ(0u, rule->m_toMask);
 	EXPECT_EQ(kKeyF19, rule->m_toID);
 }
+
+TEST(KeyRemapperTests, configReadsHangulTapAlias)
+{
+	Config config;
+	std::stringstream stream;
+	stream
+		<< "section: screens\n"
+		<< "\tserver:\n"
+		<< "\twindows:\n"
+		<< "end\n"
+		<< "section: remaps\n"
+		<< "\twindows:\n"
+		<< "\t\tright_super.alone = hangul\n"
+		<< "end\n";
+
+	stream >> config;
+
+	const KeyRemapConfig::TapRule* rule =
+		config.getKeyRemapConfig().findTapRule("windows", kKeySuper_R);
+	ASSERT_TRUE(rule != NULL);
+	EXPECT_EQ(kKeyHangul, rule->m_aloneID);
+	EXPECT_EQ(kKeySuper_R, rule->m_holdID);
+}

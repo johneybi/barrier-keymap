@@ -23,6 +23,7 @@ section: remaps
 
 	windows:
 		left_super = left_control
+		right_super.alone = hangul
 end
 
 section: options
