@@ -31,8 +31,16 @@ cmake --build /tmp/barrier-keymap-build --target barriers barrierc
 ## Publish
 
 ```sh
+gh auth status
 git status -sb
 ./publish_keymap_release.sh keymap-v0.1.0
+```
+
+If `gh auth status` reports that no GitHub hosts are logged in, authenticate
+first:
+
+```sh
+gh auth login --web --hostname github.com --git-protocol https
 ```
 
 Pushing a `keymap-v*` tag runs `.github/workflows/release.yml`. The workflow
