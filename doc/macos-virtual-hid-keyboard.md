@@ -304,6 +304,16 @@ To post a single test key after the virtual keyboard is ready:
 sudo /tmp/barrier_virtual_hid_keyboard_probe --send-test-key
 ```
 
+For a fuller local verification flow, run:
+
+```sh
+tools/macos-virtual-hid/verify_probe_device.sh
+```
+
+The script builds the probe, ensures the Karabiner profile has the Barrier input
+keyboard `ignore: false` device entry, starts the probe with sudo, then checks
+`karabiner_cli --list-connected-devices` for the Barrier input keyboard.
+
 The probe currently uses this provisional identity:
 
 ```text
@@ -423,9 +433,9 @@ only the Barrier input device.
 
 ## Immediate verification checklist
 
-1. Build or obtain the Karabiner virtual HID example client.
-2. Run it as root and confirm a non-Karabiner input virtual keyboard can appear
-   in Karabiner-EventViewer Devices.
+1. Run `tools/macos-virtual-hid/verify_probe_device.sh` from a terminal.
+2. Confirm a non-Karabiner input virtual keyboard appears in
+   Karabiner-EventViewer Devices.
 3. Confirm Karabiner can apply a `device_if` rule to that device.
 4. Confirm Karabiner output keyboard remains a separate device.
 5. Only after this proof should Barrier code be changed to depend on

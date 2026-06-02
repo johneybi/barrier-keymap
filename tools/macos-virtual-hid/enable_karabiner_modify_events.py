@@ -191,12 +191,16 @@ def main():
     action, device = ensure_barrier_device(
         profile, args.vendor_id, args.product_id
     )
+    changed = updated != original
 
     output_entries = find_karabiner_output_device_entries(profile)
 
     if args.dry_run:
         json.dump(updated, sys.stdout, ensure_ascii=False, indent=4)
         sys.stdout.write("\n")
+    elif not changed:
+        print("unchanged: Barrier input virtual keyboard device entry")
+        print(f"config: {path}")
     else:
         if not args.no_backup:
             backup = path.with_suffix(
