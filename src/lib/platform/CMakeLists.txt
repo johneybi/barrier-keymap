@@ -20,6 +20,10 @@ if (WIN32)
 elseif (APPLE)
     file(GLOB headers "OSX*.h" "IOSX*.h")
     file(GLOB sources "OSX*.cpp" "IOSX*.cpp" "OSX*.m" "OSX*.mm")
+    option(BARRIER_ENABLE_MAC_VIRTUAL_HID
+        "Enable experimental macOS Karabiner VirtualHID keyboard output" OFF)
+    set(KARABINER_VHID_REPO "/tmp/Karabiner-DriverKit-VirtualHIDDevice"
+        CACHE PATH "Karabiner-DriverKit-VirtualHIDDevice checkout")
 elseif (UNIX)
     file(GLOB headers "XWindows*.h")
     file(GLOB sources "XWindows*.cpp")
@@ -46,4 +50,21 @@ endif()
 if (APPLE)
     find_library(COCOA_LIBRARY Cocoa)
     target_link_libraries(platform ${COCOA_LIBRARY})
+    if (BARRIER_ENABLE_MAC_VIRTUAL_HID)
+        if (NOT EXISTS "${KARABINER_VHID_REPO}/include" OR
+            NOT EXISTS "${KARABINER_VHID_REPO}/vendor/vendor/include")
+            message(FATAL_ERROR
+                "Karabiner VirtualHID headers not found. "
+                "Set KARABINER_VHID_REPO to a Karabiner-DriverKit-VirtualHIDDevice checkout.")
+        endif()
+
+        set_source_files_properties(
+            "${CMAKE_CURRENT_SOURCE_DIR}/OSXKeyState.cpp"
+            PROPERTIES
+                COMPILE_FLAGS "-std=c++20")
+        target_compile_definitions(platform PRIVATE BARRIER_ENABLE_MAC_VIRTUAL_HID=1)
+        target_include_directories(platform PRIVATE
+            "${KARABINER_VHID_REPO}/include"
+            "${KARABINER_VHID_REPO}/vendor/vendor/include")
+    endif()
 endif()
