@@ -346,6 +346,21 @@ The script builds the probe, ensures the Karabiner profile has the Barrier input
 keyboard `ignore: false` device entry, starts the probe with sudo, then checks
 `karabiner_cli --list-connected-devices` for the Barrier input keyboard.
 
+It writes a machine-readable result to:
+
+```text
+/tmp/barrier-vhid-verification-status.json
+```
+
+To leave the probe running after a successful check, use:
+
+```sh
+tools/macos-virtual-hid/verify_probe_device.sh --keep-running
+```
+
+This is useful when verifying Karabiner-EventViewer Devices manually or when
+testing whether a `device_if` rule applies to the Barrier input keyboard.
+
 The probe currently uses this provisional identity:
 
 ```text
