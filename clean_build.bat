@@ -15,11 +15,13 @@ if "%VisualStudioVersion%"=="15.0" (
     set cmake_gen=Visual Studio 15 2017
 ) else if "%VisualStudioVersion%"=="16.0" (
     set cmake_gen=Visual Studio 16 2019
+) else if "%VisualStudioVersion%"=="17.0" (
+    set cmake_gen=Visual Studio 17 2022
 ) else (
     echo Visual Studio version was not detected.
     echo Did you forget to run inside a VS developer prompt?
     echo Using the default cmake generator.
-    set cmake_gen=Visual Studio 16 2019
+    set cmake_gen=Visual Studio 17 2022
 )
 
 if exist build_env.bat call build_env.bat
