@@ -24,9 +24,11 @@
 #include "common/stdvector.h"
 
 #include <Carbon/Carbon.h>
+#include <memory>
 
 typedef TISInputSourceRef KeyLayout;
 class IOSXKeyResource;
+class OSXVirtualHIDKeyboardOutput;
 
 //! OS X key state
 /*!
@@ -177,4 +179,6 @@ private:
     bool                m_altPressed;
     bool                m_superPressed;
     bool                m_capsPressed;
+    std::unique_ptr<OSXVirtualHIDKeyboardOutput>
+                        m_virtualHIDKeyboardOutput;
 };

@@ -25,6 +25,18 @@
 #include <Carbon/Carbon.h>
 #include <IOKit/hidsystem/IOHIDLib.h>
 
+#include <cstdlib>
+#include <filesystem>
+#include <mutex>
+#include <set>
+#include <string>
+#include <unistd.h>
+
+#if BARRIER_ENABLE_MAC_VIRTUAL_HID
+#include <pqrs/karabiner/driverkit/virtual_hid_device_driver.hpp>
+#include <pqrs/karabiner/driverkit/virtual_hid_device_service.hpp>
+#endif
+
 // Note that some virtual keys codes appear more than once.  The
 // first instance of a virtual key code maps to the KeyID that we
 // want to generate for that code.  The others are for mapping
@@ -135,6 +147,367 @@ static const KeyEntry    s_controlKeys[] = {
     { kKeyZenkaku, kVK_ANSI_Grave }
 };
 
+class OSXVirtualHIDKeyboardOutput {
+public:
+    static std::unique_ptr<OSXVirtualHIDKeyboardOutput> createFromEnvironment()
+    {
+        const char* output = std::getenv("BARRIER_MAC_KEY_OUTPUT");
+        if (output == NULL || std::string(output) != "virtual-hid") {
+            return std::unique_ptr<OSXVirtualHIDKeyboardOutput>();
+        }
+
+        std::unique_ptr<OSXVirtualHIDKeyboardOutput> result(
+            new OSXVirtualHIDKeyboardOutput());
+        if (!result->start()) {
+            return std::unique_ptr<OSXVirtualHIDKeyboardOutput>();
+        }
+        return result;
+    }
+
+    ~OSXVirtualHIDKeyboardOutput()
+    {
+        stop();
+    }
+
+    bool postVirtualKey(UInt8 virtualKeyCode, bool keyDown)
+    {
+#if BARRIER_ENABLE_MAC_VIRTUAL_HID
+        std::lock_guard<std::mutex> lock(m_mutex);
+
+        Modifier modifier;
+        UInt16 usage = 0;
+        bool isModifier = false;
+
+        if (mapModifier(virtualKeyCode, modifier)) {
+            isModifier = true;
+        }
+        else if (!mapVirtualKeyToUSBUsage(virtualKeyCode, usage)) {
+            LOG((CLOG_WARN
+                "VirtualHID output does not support mac virtual key 0x%02x; "
+                "falling back to IOHIDPostEvent",
+                virtualKeyCode));
+            return false;
+        }
+
+        if (isModifier) {
+            if (keyDown) {
+                m_modifiers.insert(modifier);
+            }
+            else {
+                m_modifiers.erase(modifier);
+            }
+        }
+        else {
+            if (keyDown) {
+                m_keys.insert(usage);
+            }
+            else {
+                m_keys.erase(usage);
+            }
+        }
+
+        postReportLocked();
+        return m_ready;
+#else
+        (void)virtualKeyCode;
+        (void)keyDown;
+        return false;
+#endif
+    }
+
+    void reset()
+    {
+#if BARRIER_ENABLE_MAC_VIRTUAL_HID
+        std::lock_guard<std::mutex> lock(m_mutex);
+        m_modifiers.clear();
+        m_keys.clear();
+        postReportLocked();
+#endif
+    }
+
+private:
+#if BARRIER_ENABLE_MAC_VIRTUAL_HID
+    typedef pqrs::karabiner::driverkit::virtual_hid_device_driver::
+        hid_report::modifier Modifier;
+    typedef pqrs::karabiner::driverkit::virtual_hid_device_driver::
+        hid_report::keyboard_input KeyboardInput;
+    typedef pqrs::karabiner::driverkit::virtual_hid_device_service::client
+        Client;
+#else
+    enum class Modifier {
+        left_control,
+        left_shift,
+        left_option,
+        left_command,
+    };
+#endif
+
+    OSXVirtualHIDKeyboardOutput() :
+        m_ready(false),
+        m_started(false)
+    {
+    }
+
+    bool start()
+    {
+#if BARRIER_ENABLE_MAC_VIRTUAL_HID
+        static const char* s_socket =
+            "/Library/Application Support/org.pqrs/tmp/rootonly/vhidd_server";
+
+        if (access(s_socket, R_OK) != 0) {
+            LOG((CLOG_WARN
+                "BARRIER_MAC_KEY_OUTPUT=virtual-hid requested, but the "
+                "Karabiner VirtualHID root-only socket is not accessible; "
+                "run the macOS client with suitable privileges or use IOHID"));
+            return false;
+        }
+
+        pqrs::dispatcher::extra::initialize_shared_dispatcher();
+
+        m_client.reset(new Client());
+
+        m_client->warning_reported.connect([](auto&& message) {
+            LOG((CLOG_WARN "VirtualHID warning: %s", message.c_str()));
+        });
+
+        m_client->connect_failed.connect([](auto&& errorCode) {
+            LOG((CLOG_WARN "VirtualHID connect_failed: %s",
+                errorCode.message().c_str()));
+        });
+
+        m_client->closed.connect([this] {
+            std::lock_guard<std::mutex> lock(m_mutex);
+            m_ready = false;
+            LOG((CLOG_WARN "VirtualHID connection closed"));
+        });
+
+        m_client->error_occurred.connect([](auto&& errorCode) {
+            LOG((CLOG_WARN "VirtualHID error_occurred: %s",
+                errorCode.message().c_str()));
+        });
+
+        m_client->connected.connect([this] {
+            LOG((CLOG_INFO
+                "initializing Barrier input VirtualHID keyboard "
+                "vendor_id=0x1209 product_id=0x4b42"));
+
+            pqrs::karabiner::driverkit::virtual_hid_device_service::
+                virtual_hid_keyboard_parameters parameters;
+            parameters.set_vendor_id(pqrs::hid::vendor_id::value_t(0x1209));
+            parameters.set_product_id(pqrs::hid::product_id::value_t(0x4b42));
+            parameters.set_country_code(pqrs::hid::country_code::us);
+
+            m_client->async_virtual_hid_keyboard_initialize(parameters);
+        });
+
+        m_client->virtual_hid_keyboard_ready.connect([this](auto&& ready) {
+            std::lock_guard<std::mutex> lock(m_mutex);
+            m_ready = ready;
+            LOG((CLOG_INFO "Barrier input VirtualHID keyboard ready=%s",
+                ready ? "true" : "false"));
+            if (m_ready) {
+                postReportLocked();
+            }
+        });
+
+        m_client->async_start();
+        m_started = true;
+        LOG((CLOG_INFO "macOS key output: Karabiner VirtualHID keyboard"));
+        return true;
+#else
+        LOG((CLOG_WARN
+            "BARRIER_MAC_KEY_OUTPUT=virtual-hid requested, but Barrier was "
+            "built without BARRIER_ENABLE_MAC_VIRTUAL_HID"));
+        return false;
+#endif
+    }
+
+    void stop()
+    {
+#if BARRIER_ENABLE_MAC_VIRTUAL_HID
+        if (!m_started) {
+            return;
+        }
+
+        {
+            std::lock_guard<std::mutex> lock(m_mutex);
+            m_modifiers.clear();
+            m_keys.clear();
+            postReportLocked();
+
+            if (m_client) {
+                m_client->async_virtual_hid_keyboard_terminate();
+                m_client = nullptr;
+            }
+            m_ready = false;
+        }
+
+        pqrs::dispatcher::extra::terminate_shared_dispatcher();
+        m_started = false;
+#endif
+    }
+
+    static bool mapModifier(UInt8 virtualKeyCode, Modifier& modifier)
+    {
+        switch (virtualKeyCode) {
+        case s_controlVK:
+            modifier = Modifier::left_control;
+            return true;
+        case s_shiftVK:
+            modifier = Modifier::left_shift;
+            return true;
+        case s_altVK:
+            modifier = Modifier::left_option;
+            return true;
+        case s_superVK:
+            modifier = Modifier::left_command;
+            return true;
+        default:
+            return false;
+        }
+    }
+
+    static bool mapVirtualKeyToUSBUsage(UInt8 virtualKeyCode, UInt16& usage)
+    {
+        switch (virtualKeyCode) {
+        case kVK_ANSI_A: usage = 0x04; return true;
+        case kVK_ANSI_B: usage = 0x05; return true;
+        case kVK_ANSI_C: usage = 0x06; return true;
+        case kVK_ANSI_D: usage = 0x07; return true;
+        case kVK_ANSI_E: usage = 0x08; return true;
+        case kVK_ANSI_F: usage = 0x09; return true;
+        case kVK_ANSI_G: usage = 0x0a; return true;
+        case kVK_ANSI_H: usage = 0x0b; return true;
+        case kVK_ANSI_I: usage = 0x0c; return true;
+        case kVK_ANSI_J: usage = 0x0d; return true;
+        case kVK_ANSI_K: usage = 0x0e; return true;
+        case kVK_ANSI_L: usage = 0x0f; return true;
+        case kVK_ANSI_M: usage = 0x10; return true;
+        case kVK_ANSI_N: usage = 0x11; return true;
+        case kVK_ANSI_O: usage = 0x12; return true;
+        case kVK_ANSI_P: usage = 0x13; return true;
+        case kVK_ANSI_Q: usage = 0x14; return true;
+        case kVK_ANSI_R: usage = 0x15; return true;
+        case kVK_ANSI_S: usage = 0x16; return true;
+        case kVK_ANSI_T: usage = 0x17; return true;
+        case kVK_ANSI_U: usage = 0x18; return true;
+        case kVK_ANSI_V: usage = 0x19; return true;
+        case kVK_ANSI_W: usage = 0x1a; return true;
+        case kVK_ANSI_X: usage = 0x1b; return true;
+        case kVK_ANSI_Y: usage = 0x1c; return true;
+        case kVK_ANSI_Z: usage = 0x1d; return true;
+        case kVK_ANSI_1: usage = 0x1e; return true;
+        case kVK_ANSI_2: usage = 0x1f; return true;
+        case kVK_ANSI_3: usage = 0x20; return true;
+        case kVK_ANSI_4: usage = 0x21; return true;
+        case kVK_ANSI_5: usage = 0x22; return true;
+        case kVK_ANSI_6: usage = 0x23; return true;
+        case kVK_ANSI_7: usage = 0x24; return true;
+        case kVK_ANSI_8: usage = 0x25; return true;
+        case kVK_ANSI_9: usage = 0x26; return true;
+        case kVK_ANSI_0: usage = 0x27; return true;
+        case kVK_Return: usage = 0x28; return true;
+        case kVK_Escape: usage = 0x29; return true;
+        case kVK_Delete: usage = 0x2a; return true;
+        case kVK_Tab: usage = 0x2b; return true;
+        case kVK_Space: usage = 0x2c; return true;
+        case kVK_ANSI_Minus: usage = 0x2d; return true;
+        case kVK_ANSI_Equal: usage = 0x2e; return true;
+        case kVK_ANSI_LeftBracket: usage = 0x2f; return true;
+        case kVK_ANSI_RightBracket: usage = 0x30; return true;
+        case kVK_ANSI_Backslash: usage = 0x31; return true;
+        case kVK_ANSI_Semicolon: usage = 0x33; return true;
+        case kVK_ANSI_Quote: usage = 0x34; return true;
+        case kVK_ANSI_Grave: usage = 0x35; return true;
+        case kVK_ANSI_Comma: usage = 0x36; return true;
+        case kVK_ANSI_Period: usage = 0x37; return true;
+        case kVK_ANSI_Slash: usage = 0x38; return true;
+        case kVK_CapsLock: usage = 0x39; return true;
+        case kVK_F1: usage = 0x3a; return true;
+        case kVK_F2: usage = 0x3b; return true;
+        case kVK_F3: usage = 0x3c; return true;
+        case kVK_F4: usage = 0x3d; return true;
+        case kVK_F5: usage = 0x3e; return true;
+        case kVK_F6: usage = 0x3f; return true;
+        case kVK_F7: usage = 0x40; return true;
+        case kVK_F8: usage = 0x41; return true;
+        case kVK_F9: usage = 0x42; return true;
+        case kVK_F10: usage = 0x43; return true;
+        case kVK_F11: usage = 0x44; return true;
+        case kVK_F12: usage = 0x45; return true;
+        case kVK_F13: usage = 0x68; return true;
+        case kVK_F14: usage = 0x69; return true;
+        case kVK_F15: usage = 0x6a; return true;
+        case kVK_F16: usage = 0x6b; return true;
+        case kVK_F17: usage = 0x6c; return true;
+        case kVK_F18: usage = 0x6d; return true;
+        case kVK_F19: usage = 0x6e; return true;
+        case kVK_Help: usage = 0x49; return true;
+        case kVK_Home: usage = 0x4a; return true;
+        case kVK_PageUp: usage = 0x4b; return true;
+        case kVK_ForwardDelete: usage = 0x4c; return true;
+        case kVK_End: usage = 0x4d; return true;
+        case kVK_PageDown: usage = 0x4e; return true;
+        case kVK_RightArrow: usage = 0x4f; return true;
+        case kVK_LeftArrow: usage = 0x50; return true;
+        case kVK_DownArrow: usage = 0x51; return true;
+        case kVK_UpArrow: usage = 0x52; return true;
+        case kVK_ANSI_KeypadClear: usage = 0x53; return true;
+        case kVK_ANSI_KeypadDivide: usage = 0x54; return true;
+        case kVK_ANSI_KeypadMultiply: usage = 0x55; return true;
+        case kVK_ANSI_KeypadMinus: usage = 0x56; return true;
+        case kVK_ANSI_KeypadPlus: usage = 0x57; return true;
+        case kVK_ANSI_KeypadEnter: usage = 0x58; return true;
+        case kVK_ANSI_Keypad1: usage = 0x59; return true;
+        case kVK_ANSI_Keypad2: usage = 0x5a; return true;
+        case kVK_ANSI_Keypad3: usage = 0x5b; return true;
+        case kVK_ANSI_Keypad4: usage = 0x5c; return true;
+        case kVK_ANSI_Keypad5: usage = 0x5d; return true;
+        case kVK_ANSI_Keypad6: usage = 0x5e; return true;
+        case kVK_ANSI_Keypad7: usage = 0x5f; return true;
+        case kVK_ANSI_Keypad8: usage = 0x60; return true;
+        case kVK_ANSI_Keypad9: usage = 0x61; return true;
+        case kVK_ANSI_Keypad0: usage = 0x62; return true;
+        case kVK_ANSI_KeypadDecimal: usage = 0x63; return true;
+        case kVK_ANSI_KeypadEquals: usage = 0x67; return true;
+        case kVK_JIS_Kana: usage = 0x90; return true;
+        case kVK_JIS_Eisu: usage = 0x91; return true;
+        default:
+            return false;
+        }
+    }
+
+#if BARRIER_ENABLE_MAC_VIRTUAL_HID
+    void postReportLocked()
+    {
+        if (!m_ready || !m_client) {
+            return;
+        }
+
+        KeyboardInput report;
+        for (std::set<Modifier>::const_iterator i = m_modifiers.begin();
+            i != m_modifiers.end(); ++i) {
+            report.modifiers.insert(*i);
+        }
+        for (std::set<UInt16>::const_iterator i = m_keys.begin();
+            i != m_keys.end(); ++i) {
+            report.keys.insert(*i);
+        }
+
+        m_client->async_post_report(report);
+    }
+
+    std::unique_ptr<Client> m_client;
+#else
+    void postReportLocked() {}
+#endif
+
+    bool m_ready;
+    bool m_started;
+    std::mutex m_mutex;
+    std::set<Modifier> m_modifiers;
+    std::set<UInt16> m_keys;
+};
 
 //
 // OSXKeyState
@@ -154,6 +527,9 @@ OSXKeyState::OSXKeyState(IEventQueue* events, barrier::KeyMap& keyMap) :
 
 OSXKeyState::~OSXKeyState()
 {
+    if (m_virtualHIDKeyboardOutput) {
+        m_virtualHIDKeyboardOutput->reset();
+    }
 }
 
 void
@@ -165,6 +541,8 @@ OSXKeyState::init()
     m_altPressed = false;
     m_superPressed = false;
     m_capsPressed = false;
+    m_virtualHIDKeyboardOutput =
+        OSXVirtualHIDKeyboardOutput::createFromEnvironment();
 
     // build virtual key map
     for (size_t i = 0; i < sizeof(s_controlKeys) / sizeof(s_controlKeys[0]);
@@ -594,7 +972,10 @@ OSXKeyState::fakeKey(const Keystroke& keystroke)
             "  button=0x%04x virtualKey=0x%04x keyDown=%s",
             button, virtualKey, keyDown ? "down" : "up"));
 
-        postHIDVirtualKey(virtualKey, keyDown);
+        if (!m_virtualHIDKeyboardOutput ||
+            !m_virtualHIDKeyboardOutput->postVirtualKey(virtualKey, keyDown)) {
+            postHIDVirtualKey(virtualKey, keyDown);
+        }
 
         break;
     }

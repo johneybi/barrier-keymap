@@ -256,6 +256,48 @@ Each key down/up updates the pressed sets and posts one complete
 `keyboard_input` report. On disconnect, screen reset, or `fakeAllKeysUp`, it
 must post an empty report to avoid stuck keys.
 
+## Experimental Barrier integration
+
+The repository now has an experimental macOS client integration behind a CMake
+option:
+
+```sh
+cmake -S . -B /tmp/barrier-keymap-vhid-build \
+  -DBARRIER_ENABLE_MAC_VIRTUAL_HID=ON \
+  -DKARABINER_VHID_REPO=/tmp/Karabiner-DriverKit-VirtualHIDDevice \
+  -DBARRIER_BUILD_GUI=OFF \
+  -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+cmake --build /tmp/barrier-keymap-vhid-build --target barrierc
+```
+
+At runtime, the existing IOHID path remains the default. To route supported
+remote key output through the Barrier input VirtualHID keyboard, run the macOS
+client with:
+
+```sh
+BARRIER_MAC_KEY_OUTPUT=virtual-hid \
+  /tmp/barrier-keymap-vhid-build/bin/barrierc ...
+```
+
+The current implementation:
+
+- initializes a Karabiner VirtualHID keyboard with `vendor_id=0x1209` and
+  `product_id=0x4b42`
+- keeps a pressed modifier set and pressed key set
+- posts complete `keyboard_input` reports after each key transition
+- falls back to the original `IOHIDPostEvent` path if VirtualHID is not ready
+  or if a key is not yet mapped to a USB HID usage
+- keeps the original IOHID behavior unless `BARRIER_MAC_KEY_OUTPUT=virtual-hid`
+  is set
+
+Current limitations:
+
+- the client must be able to access Karabiner's root-only VirtualHID socket
+- right modifiers still collapse to left modifiers because the current macOS
+  key map maps both sides to the same Carbon virtual key before output
+- media keys still use the existing separate `fakeMediaKey` path
+- this is intended for command-line `barrierc` testing before GUI packaging
+
 ## Confirmed Karabiner VirtualHID facts
 
 The upstream `Karabiner-DriverKit-VirtualHIDDevice` client example uses:
