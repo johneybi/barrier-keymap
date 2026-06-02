@@ -1,35 +1,60 @@
-# Barrier
+# Barrier Keymap
 
-Eliminate the barrier between your machines.
+Eliminate the barrier between your machines, with key remapping handled before
+Barrier sends remote input to the active screen.
 
-This fork adds experimental server-side key remapping so the Barrier server can
-translate selected key events before they are sent to a target screen. See
-[server-side key remaps](doc/key-remaps.md) for the supported config subset,
-examples, and verification commands. See the [release checklist](doc/release-checklist.md)
-for the publish and manual verification flow used by this fork.
+Barrier normally relays keyboard events from the server machine to the selected
+client screen. Once those events arrive at the receiving OS, tools such as
+Karabiner-Elements or AutoHotkey may not see them as ordinary local keyboard
+input, or may see them too late to preserve the intended modifier behavior. This
+build solves that problem inside Barrier: the server translates selected key
+events before they are delivered to the target screen.
 
-Find [releases for windows and macOS here](https://github.com/debauchee/barrier/releases).
-Your distro probably already has barrier packaged for it, see [distro specific packages](#distro-specific-packages)
-below for a list. Alternatively, we also provide a [flatpak](https://github.com/flathub/com.github.debauchee.barrier)
-and a [snap](https://snapcraft.io/barrier).
+The normal Barrier mouse-edge switching UX is unchanged. The added keymap layer
+only affects configured keyboard rules on configured screens.
 
-### Contact info:
+## Downloads
 
-- `#barrier` on LiberaChat IRC network
+Download Linux and macOS builds from this repository's
+[releases](https://github.com/johneybi/barrier-keymap/releases). Each release
+includes `.sha256` files for checking the downloaded archives.
 
-#### CI Build Status
+## Server-side key remaps
 
-Master branch overall build status: [![Build Status](https://dev.azure.com/debauchee/Barrier/_apis/build/status/debauchee.barrier?branchName=master)](https://dev.azure.com/debauchee/Barrier/_build/latest?definitionId=1&branchName=master)
+Remaps are configured in a `section: remaps` block and can be scoped per target
+screen:
 
-|Platform       |Build Status|
-|            --:|:--         |
-|Linux          |[![Build Status](https://dev.azure.com/debauchee/Barrier/_apis/build/status/debauchee.barrier?branchName=master&jobName=Linux%20Build)](https://dev.azure.com/debauchee/Barrier/_build/latest?definitionId=1&branchName=master)|
-|Mac            |[![Build Status](https://dev.azure.com/debauchee/Barrier/_apis/build/status/debauchee.barrier?branchName=master&jobName=Mac%20Build)](https://dev.azure.com/debauchee/Barrier/_build/latest?definitionId=1&branchName=master)|
-|Windows Debug  |[![Build Status](https://dev.azure.com/debauchee/Barrier/_apis/build/status/debauchee.barrier?branchName=master&jobName=Windows%20Build&configuration=Windows%20Build%20Debug)](https://dev.azure.com/debauchee/Barrier/_build/latest?definitionId=1&branchName=master)|
-|Windows Release|[![Build Status](https://dev.azure.com/debauchee/Barrier/_apis/build/status/debauchee.barrier?branchName=master&jobName=Windows%20Build&configuration=Windows%20Build%20Release%20with%20Release%20Installer)](https://dev.azure.com/debauchee/Barrier/_build/latest?definitionId=1&branchName=master)|
-|Snap           |[![Snap Status](https://build.snapcraft.io/badge/debauchee/barrier.svg)](https://build.snapcraft.io/user/debauchee/barrier)|
+```text
+section: remaps
+  mac:
+    right_alt = right_super
+    right_super.alone = F19
+    right_super.hold = right_super
+    control+space = F19
 
-Our CI Builds are provided by Microsoft Azure Pipelines, Flathub, and Canonical.
+  windows:
+    left_super = left_control
+    right_super.alone = hangul
+end
+```
+
+Supported behavior includes direct key remaps, left/right modifier key names,
+tap-hold rules such as `right_super.alone`, and hotkey-style chord remaps such
+as `control+space = F19`.
+
+See [server-side key remaps](doc/key-remaps.md) for the supported config subset,
+examples, limitations, and verification commands. See the
+[release checklist](doc/release-checklist.md) for the publish and manual
+verification flow used by this build.
+
+## Relationship to Barrier
+
+This is an unofficial modified build of Barrier focused on server-side key
+remapping. It is not affiliated with or endorsed by the upstream Barrier
+maintainers.
+
+The original Barrier project and its package ecosystem remain available from
+the upstream repository at <https://github.com/debauchee/barrier>.
 
 ### What is it?
 
@@ -70,17 +95,18 @@ Note that if the keyboard's Scroll Lock is active then this will prevent the mou
 
 ### Contact & support
 
-Please be aware that the *only* way to draw our attention to a bug is to create a new issue in [the issue tracker](https://github.com/debauchee/barrier/issues). Write a clear, concise, detailed report and you will get a clear, concise, detailed response. Priority is always given to issues that affect a wider range of users.
+For key remapping behavior, packaging, or release issues in this build, open an
+issue in this repository:
+<https://github.com/johneybi/barrier-keymap/issues>.
 
-For short and simple questions or to just say hello find us on the LiberaChat IRC network in the #barrier channel.
+For bugs that also reproduce in upstream Barrier without the `section: remaps`
+configuration, check the upstream Barrier project:
+<https://github.com/debauchee/barrier>.
 
 ### Contributions
 
-At this time we are looking for developers to help fix the issues found in the issue tracker.
-Submit pull requests once you've polished up your patch and we'll review and possibly merge it.
-
-Most pull requests will need to include a release note.
-See docs/newsfragments/README.md for documentation of how to do that.
+Contributions are welcome, especially around key remap rules, platform key-code
+coverage, tests, and release packaging.
 
 ## Distro specific packages
 
