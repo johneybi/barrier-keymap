@@ -57,10 +57,11 @@ Windows Barrier server
 -> macOS apps
 ```
 
-The replacement boundary should be `OSXKeyState::postHIDVirtualKey`, not the
-generic `KeyState` mapping layer. Keeping the existing `KeyMap` path preserves
-Barrier's current protocol handling, modifier state tracking, layout groups,
-repeat handling, and media-key fallback.
+For a first proof, the smallest replacement boundary is
+`OSXKeyState::postHIDVirtualKey`, not the generic `KeyState` mapping layer.
+Keeping the existing `KeyMap` path preserves Barrier's current protocol
+handling, modifier state tracking, layout groups, repeat handling, and
+media-key fallback.
 
 There is one caveat: the current macOS key map collapses right-handed modifier
 keys onto left-handed macOS virtual key codes:
@@ -73,8 +74,8 @@ kKeySuper_R   -> kVK_Command
 ```
 
 If Karabiner rules need to distinguish left and right modifiers from Barrier,
-the VirtualHID adapter must not rely only on the final macOS virtual key code.
-It needs either:
+the production VirtualHID adapter must not rely only on the final macOS virtual
+key code. It needs either:
 
 - a custom macOS key map that keeps distinct local buttons for right modifiers,
 - access to the original `KeyID` before `KeyState::fakeKeys` converts it into
@@ -85,6 +86,14 @@ It needs either:
 For a first proof, plain alphanumeric keys and generic modifiers can be tested
 at `postHIDVirtualKey`. For production-grade Karabiner integration, preserving
 left/right modifier identity is a separate requirement.
+
+`KeyMap::KeyItem::m_client` already survives into
+`KeyMap::Keystroke::m_data.m_button.m_client`, so the least invasive production
+path is to store macOS/USB output metadata there when building the macOS key
+map, then consume it from `OSXKeyState::fakeKey`. That keeps the existing
+`KeyState::fakeKeyDown`, `fakeKeyRepeat`, and `fakeKeyUp` bookkeeping intact
+while avoiding the right-modifier collapse that happens after
+`mapKeyButtonToVirtualKey`.
 
 ## VirtualHID integration options
 
@@ -195,12 +204,22 @@ src/lib/platform/OSXVirtualHIDKeyboardOutput.*
 ```
 
 2. Keep `OSXKeyState::fakeKey` as the mapping boundary, but replace the direct
-call to `postHIDVirtualKey` with an output object:
+call to `postHIDVirtualKey` with an output object. For the early proof this can
+accept macOS virtual key codes:
 
 ```text
 OSXKeyState::fakeKey
 -> mapKeyButtonToVirtualKey
 -> keyboardOutput->postVirtualKey(virtualKey, keyDown)
+```
+
+For the production path, prefer a richer call that also passes the Barrier
+client data carried by the keystroke:
+
+```text
+OSXKeyState::fakeKey
+-> button, keyDown, repeat, clientData
+-> keyboardOutput->postKey(button, keyDown, repeat, clientData)
 ```
 
 3. Preserve the existing `IOHIDPostEvent` output as the default/fallback.
@@ -223,6 +242,19 @@ virtual HID daemon connection status
 virtual keyboard vendor/product ID
 whether output is IOHID or VirtualHID
 ```
+
+7. The VirtualHID output is report-state based. Its adapter must keep:
+
+```text
+pressed modifier usages
+pressed non-modifier usages
+last posted report
+daemon connection/ready state
+```
+
+Each key down/up updates the pressed sets and posts one complete
+`keyboard_input` report. On disconnect, screen reset, or `fakeAllKeysUp`, it
+must post an empty report to avoid stuck keys.
 
 ## Confirmed Karabiner VirtualHID facts
 
