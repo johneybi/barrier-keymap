@@ -26,7 +26,6 @@
 #include <IOKit/hidsystem/IOHIDLib.h>
 
 #include <cstdlib>
-#include <filesystem>
 #include <mutex>
 #include <set>
 #include <string>
