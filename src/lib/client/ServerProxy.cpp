@@ -39,6 +39,8 @@
 // ServerProxy
 //
 
+static const double kHandshakeKeepAliveAlarm = kKeepAliveRate * kKeepAlivesUntilDeath * 4.0;
+
 ServerProxy::ServerProxy(Client* client, barrier::IStream* stream, IEventQueue* events) :
     m_client(client),
     m_stream(stream),
@@ -73,8 +75,9 @@ ServerProxy::ServerProxy(Client* client, barrier::IStream* stream, IEventQueue* 
                             new TMethodEventJob<ServerProxy>(this,
                                 &ServerProxy::handleClipboardSendingEvent));
 
-    // send heartbeat
-    setKeepAliveRate(kKeepAliveRate);
+    // Allow slow server-side proxy setup before the normal heartbeat starts.
+    m_keepAliveAlarm = kHandshakeKeepAliveAlarm;
+    resetKeepAliveAlarm();
 }
 
 ServerProxy::~ServerProxy()
@@ -158,6 +161,8 @@ ServerProxy::handleData(const Event&, void*)
 ServerProxy::EResult
 ServerProxy::parseHandshakeMessage(const UInt8* code)
 {
+    LOG((CLOG_DEBUG1 "handshake msg from server: %c%c%c%c", code[0], code[1], code[2], code[3]));
+
     if (memcmp(code, kMsgQInfo, 4) == 0) {
         queryInfo();
     }
@@ -167,6 +172,7 @@ ServerProxy::parseHandshakeMessage(const UInt8* code)
     }
 
     else if (memcmp(code, kMsgDSetOptions, 4) == 0) {
+        setKeepAliveRate(kKeepAliveRate);
         setOptions();
 
         // handshake is complete
@@ -346,7 +352,7 @@ ServerProxy::parseMessage(const UInt8* code)
 void
 ServerProxy::handleKeepAliveAlarm(const Event&, void*)
 {
-    LOG((CLOG_NOTE "server is dead"));
+    LOG((CLOG_NOTE "server is dead (keep-alive alarm %.3fs)", m_keepAliveAlarm));
     m_client->disconnect("server is not responding");
 }
 
@@ -801,7 +807,13 @@ ServerProxy::resetOptions()
     m_client->resetOptions();
 
     // reset keep alive
-    setKeepAliveRate(kKeepAliveRate);
+    if (m_parser == &ServerProxy::parseHandshakeMessage) {
+        m_keepAliveAlarm = kHandshakeKeepAliveAlarm;
+        resetKeepAliveAlarm();
+    }
+    else {
+        setKeepAliveRate(kKeepAliveRate);
+    }
 
     // reset modifier translation table
     for (KeyModifierID id = 0; id < kKeyModifierIDLast; ++id) {
