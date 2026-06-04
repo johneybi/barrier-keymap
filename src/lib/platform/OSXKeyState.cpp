@@ -199,10 +199,16 @@ public:
         }
         else {
             if (keyDown) {
+                // Send non-modifier keys as taps so macOS does not auto-repeat
+                // while Barrier waits for the remote key-up packet.
                 m_keys.insert(usage);
+                postReportLocked();
+                m_keys.erase(usage);
             }
             else {
-                m_keys.erase(usage);
+                if (m_keys.erase(usage) == 0) {
+                    return m_ready;
+                }
             }
         }
 
