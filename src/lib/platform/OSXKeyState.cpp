@@ -215,6 +215,16 @@ public:
 #endif
     }
 
+    bool isReady() const
+    {
+#if BARRIER_ENABLE_MAC_VIRTUAL_HID
+        std::lock_guard<std::mutex> lock(m_mutex);
+        return m_ready;
+#else
+        return false;
+#endif
+    }
+
     void reset()
     {
 #if BARRIER_ENABLE_MAC_VIRTUAL_HID
@@ -508,7 +518,7 @@ private:
 
     bool m_ready;
     bool m_started;
-    std::mutex m_mutex;
+    mutable std::mutex m_mutex;
     std::set<Modifier> m_modifiers;
     std::set<UInt16> m_keys;
 };
@@ -970,11 +980,21 @@ OSXKeyState::fakeKey(const Keystroke& keystroke)
 
         KeyButton button = keystroke.m_data.m_button.m_button;
         bool keyDown = keystroke.m_data.m_button.m_press;
+        bool repeat = keystroke.m_data.m_button.m_repeat;
         CGKeyCode virtualKey = mapKeyButtonToVirtualKey(button);
 
         LOG((CLOG_DEBUG1
-            "  button=0x%04x virtualKey=0x%04x keyDown=%s",
-            button, virtualKey, keyDown ? "down" : "up"));
+            "  button=0x%04x virtualKey=0x%04x keyDown=%s repeat=%s",
+            button, virtualKey, keyDown ? "down" : "up",
+            repeat ? "true" : "false"));
+
+        if (repeat && m_virtualHIDKeyboardOutput &&
+            m_virtualHIDKeyboardOutput->isReady()) {
+            LOG((CLOG_DEBUG2
+                "  suppressing VirtualHID repeat pulse for virtualKey=0x%04x",
+                virtualKey));
+            break;
+        }
 
         if (!m_virtualHIDKeyboardOutput ||
             !m_virtualHIDKeyboardOutput->postVirtualKey(virtualKey, keyDown)) {
