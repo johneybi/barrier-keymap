@@ -32,6 +32,7 @@
 #include <unistd.h>
 
 #if BARRIER_ENABLE_MAC_VIRTUAL_HID
+#include <filesystem>
 #include <pqrs/karabiner/driverkit/virtual_hid_device_driver.hpp>
 #include <pqrs/karabiner/driverkit/virtual_hid_device_service.hpp>
 #endif
