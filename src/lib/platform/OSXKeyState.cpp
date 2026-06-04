@@ -302,6 +302,10 @@ private:
 
         m_client->virtual_hid_keyboard_ready.connect([this](auto&& ready) {
             std::lock_guard<std::mutex> lock(m_mutex);
+            if (m_ready == ready) {
+                return;
+            }
+
             m_ready = ready;
             LOG((CLOG_INFO "Barrier input VirtualHID keyboard ready=%s",
                 ready ? "true" : "false"));
