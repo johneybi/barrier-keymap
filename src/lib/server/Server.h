@@ -341,6 +341,7 @@ private:
     void                onMouseWheel(SInt32 xDelta, SInt32 yDelta);
     void                onFileChunkSending(const void* data);
     void                onFileRecieveCompleted();
+    void                logSwitchHealth();
 
     // add client to list and attach event handlers for client
     bool                addClient(BaseClientProxy*);
@@ -476,6 +477,17 @@ private:
     barrier::Screen*    m_screen;
 
     IEventQueue*        m_events;
+
+    Stopwatch            m_switchHealthTimer;
+    UInt32                m_diagPrimaryMoveCount;
+    UInt32                m_diagSecondaryMoveCount;
+    UInt32                m_diagSwitchCount;
+    SInt32                m_diagLastX;
+    SInt32                m_diagLastY;
+    SInt32                m_diagLastDx;
+    SInt32                m_diagLastDy;
+    std::string        m_diagLastSwitchFrom;
+    std::string        m_diagLastSwitchTo;
 
     // file transfer
     size_t                m_expectedFileSize;
