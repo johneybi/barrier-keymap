@@ -126,6 +126,7 @@ private:
 
     double                m_keepAliveAlarm;
     EventQueueTimer*    m_keepAliveAlarmTimer;
+    bool                m_handshakeComplete;
 
     MessageParser        m_parser;
     IEventQueue*        m_events;

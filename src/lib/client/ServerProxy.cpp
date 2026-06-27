@@ -50,8 +50,9 @@ ServerProxy::ServerProxy(Client* client, barrier::IStream* stream, IEventQueue* 
     m_dxMouse(0),
     m_dyMouse(0),
     m_ignoreMouse(false),
-    m_keepAliveAlarm(0.0),
+    m_keepAliveAlarm(kKeepAliveRate * kKeepAlivesUntilDeath),
     m_keepAliveAlarmTimer(NULL),
+    m_handshakeComplete(false),
     m_parser(&ServerProxy::parseHandshakeMessage),
     m_events(events)
 {
@@ -73,8 +74,9 @@ ServerProxy::ServerProxy(Client* client, barrier::IStream* stream, IEventQueue* 
                             new TMethodEventJob<ServerProxy>(this,
                                 &ServerProxy::handleClipboardSendingEvent));
 
-    // send heartbeat
-    setKeepAliveRate(kKeepAliveRate);
+    // Keep-alive alarms start after the handshake completes.  Some platforms
+    // can take longer than one default keep-alive death window to finish the
+    // initial screen-info/options exchange.
 }
 
 ServerProxy::~ServerProxy()
@@ -171,6 +173,8 @@ ServerProxy::parseHandshakeMessage(const UInt8* code)
 
         // handshake is complete
         m_parser = &ServerProxy::parseMessage;
+        m_handshakeComplete = true;
+        resetKeepAliveAlarm();
         m_client->handshakeComplete();
     }
 
@@ -800,8 +804,12 @@ ServerProxy::resetOptions()
     // forward
     m_client->resetOptions();
 
-    // reset keep alive
-    setKeepAliveRate(kKeepAliveRate);
+    // Reset keep alive only after the initial handshake.  During handshake,
+    // reset-options can arrive before the server has sent the final options
+    // block, and starting the death alarm here can race slow clients.
+    if (m_handshakeComplete) {
+        setKeepAliveRate(kKeepAliveRate);
+    }
 
     // reset modifier translation table
     for (KeyModifierID id = 0; id < kKeyModifierIDLast; ++id) {
