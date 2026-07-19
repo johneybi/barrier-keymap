@@ -137,6 +137,13 @@ Server::Server(
 	m_lockedToScreen(false),
 	m_screen(screen),
 	m_events(events),
+	m_diagPrimaryMoveCount(0),
+	m_diagSecondaryMoveCount(0),
+	m_diagSwitchCount(0),
+	m_diagLastX(0),
+	m_diagLastY(0),
+	m_diagLastDx(0),
+	m_diagLastDy(0),
 	m_sendFileThread(NULL),
 	m_writeToDropDirThread(NULL),
 	m_ignoreFileTransfer(false),
@@ -516,6 +523,12 @@ Server::switchScreen(BaseClientProxy* dst,
 	assert(m_active != NULL);
 
 	LOG((CLOG_INFO "switch from \"%s\" to \"%s\" at %d,%d", getName(m_active).c_str(), getName(dst).c_str(), x, y));
+	++m_diagSwitchCount;
+	m_diagLastX = x;
+	m_diagLastY = y;
+	m_diagLastSwitchFrom = getName(m_active);
+	m_diagLastSwitchTo = getName(dst);
+	logSwitchHealth();
 
 	// stop waiting to switch
 	stopSwitch();
@@ -1191,6 +1204,37 @@ Server::stopRelativeMoves()
 		LOG((CLOG_DEBUG2 "synchronize move on %s by %d,%d", getName(m_active).c_str(), m_x, m_y));
 		m_active->mouseMove(m_x, m_y);
 	}
+}
+
+void
+Server::logSwitchHealth()
+{
+	double elapsed = m_switchHealthTimer.getTime();
+	if (elapsed < 1.0) {
+		return;
+	}
+
+	UInt32 total = m_diagPrimaryMoveCount + m_diagSecondaryMoveCount +
+		m_diagSwitchCount;
+	if (total != 0) {
+		LOG((CLOG_INFO "switch health %.2fs: active=\"%s\" primaryMove=%u secondaryMove=%u switch=%u lastPos=%d,%d lastDelta=%+d,%+d lastSwitch=\"%s\"->\"%s\"",
+			elapsed,
+			(m_active != NULL ? getName(m_active).c_str() : "<none>"),
+			m_diagPrimaryMoveCount,
+			m_diagSecondaryMoveCount,
+			m_diagSwitchCount,
+			m_diagLastX,
+			m_diagLastY,
+			m_diagLastDx,
+			m_diagLastDy,
+			m_diagLastSwitchFrom.c_str(),
+			m_diagLastSwitchTo.c_str()));
+	}
+
+	m_diagPrimaryMoveCount = 0;
+	m_diagSecondaryMoveCount = 0;
+	m_diagSwitchCount = 0;
+	m_switchHealthTimer.reset();
 }
 
 void
@@ -1875,6 +1919,10 @@ bool
 Server::onMouseMovePrimary(SInt32 x, SInt32 y)
 {
 	LOG((CLOG_DEBUG4 "onMouseMovePrimary %d,%d", x, y));
+	++m_diagPrimaryMoveCount;
+	m_diagLastX = x;
+	m_diagLastY = y;
+	logSwitchHealth();
 
 	// mouse move on primary (server's) screen
 	if (m_active != m_primaryClient) {
@@ -2028,6 +2076,10 @@ void
 Server::onMouseMoveSecondary(SInt32 dx, SInt32 dy)
 {
 	LOG((CLOG_DEBUG2 "onMouseMoveSecondary %+d,%+d", dx, dy));
+	++m_diagSecondaryMoveCount;
+	m_diagLastDx = dx;
+	m_diagLastDy = dy;
+	logSwitchHealth();
 
 	// mouse move on secondary (client's) screen
 	assert(m_active != NULL);

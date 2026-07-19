@@ -53,6 +53,14 @@ ServerProxy::ServerProxy(Client* client, barrier::IStream* stream, IEventQueue* 
     m_keepAliveAlarm(kKeepAliveRate * kKeepAlivesUntilDeath),
     m_keepAliveAlarmTimer(NULL),
     m_handshakeComplete(false),
+    m_diagEnterCount(0),
+    m_diagLeaveCount(0),
+    m_diagMouseMoveCount(0),
+    m_diagMouseMoveForwardedCount(0),
+    m_diagMouseMoveCompressedCount(0),
+    m_diagMouseRelMoveCount(0),
+    m_diagLastMouseX(0),
+    m_diagLastMouseY(0),
     m_parser(&ServerProxy::parseHandshakeMessage),
     m_events(events)
 {
@@ -77,6 +85,39 @@ ServerProxy::ServerProxy(Client* client, barrier::IStream* stream, IEventQueue* 
     // Keep-alive alarms start after the handshake completes.  Some platforms
     // can take longer than one default keep-alive death window to finish the
     // initial screen-info/options exchange.
+}
+
+void
+ServerProxy::logProtocolHealth()
+{
+    double elapsed = m_protocolHealthTimer.getTime();
+    if (elapsed < 1.0) {
+        return;
+    }
+
+    UInt32 total = m_diagEnterCount + m_diagLeaveCount +
+        m_diagMouseMoveCount + m_diagMouseRelMoveCount;
+    if (total != 0) {
+        LOG((CLOG_INFO "protocol health %.2fs: enter=%u leave=%u mouse=%u forwarded=%u compressed=%u rel=%u last=%d,%d seq=%u",
+            elapsed,
+            m_diagEnterCount,
+            m_diagLeaveCount,
+            m_diagMouseMoveCount,
+            m_diagMouseMoveForwardedCount,
+            m_diagMouseMoveCompressedCount,
+            m_diagMouseRelMoveCount,
+            m_diagLastMouseX,
+            m_diagLastMouseY,
+            m_seqNum));
+    }
+
+    m_diagEnterCount = 0;
+    m_diagLeaveCount = 0;
+    m_diagMouseMoveCount = 0;
+    m_diagMouseMoveForwardedCount = 0;
+    m_diagMouseMoveCompressedCount = 0;
+    m_diagMouseRelMoveCount = 0;
+    m_protocolHealthTimer.reset();
 }
 
 ServerProxy::~ServerProxy()
@@ -160,6 +201,8 @@ ServerProxy::handleData(const Event&, void*)
 ServerProxy::EResult
 ServerProxy::parseHandshakeMessage(const UInt8* code)
 {
+    LOG((CLOG_DEBUG1 "handshake msg from server: %c%c%c%c", code[0], code[1], code[2], code[3]));
+
     if (memcmp(code, kMsgQInfo, 4) == 0) {
         queryInfo();
     }
@@ -169,6 +212,7 @@ ServerProxy::parseHandshakeMessage(const UInt8* code)
     }
 
     else if (memcmp(code, kMsgDSetOptions, 4) == 0) {
+        setKeepAliveRate(kKeepAliveRate);
         setOptions();
 
         // handshake is complete
@@ -350,7 +394,7 @@ ServerProxy::parseMessage(const UInt8* code)
 void
 ServerProxy::handleKeepAliveAlarm(const Event&, void*)
 {
-    LOG((CLOG_NOTE "server is dead"));
+    LOG((CLOG_NOTE "server is dead (keep-alive alarm %.3fs)", m_keepAliveAlarm));
     m_client->disconnect("server is not responding");
 }
 
@@ -536,6 +580,10 @@ ServerProxy::enter()
     UInt32 seqNum;
     ProtocolUtil::readf(m_stream, kMsgCEnter + 4, &x, &y, &seqNum, &mask);
     LOG((CLOG_DEBUG1 "recv enter, %d,%d %d %04x", x, y, seqNum, mask));
+    ++m_diagEnterCount;
+    m_diagLastMouseX = x;
+    m_diagLastMouseY = y;
+    logProtocolHealth();
 
     // discard old compressed mouse motion, if any
     m_compressMouse         = false;
@@ -553,6 +601,8 @@ ServerProxy::leave()
 {
     // parse
     LOG((CLOG_DEBUG1 "recv leave"));
+    ++m_diagLeaveCount;
+    logProtocolHealth();
 
     // send last mouse motion
     flushCompressedMouse();
@@ -712,6 +762,9 @@ ServerProxy::mouseMove()
     bool ignore;
     SInt16 x, y;
     ProtocolUtil::readf(m_stream, kMsgDMouseMove + 4, &x, &y);
+    ++m_diagMouseMoveCount;
+    m_diagLastMouseX = x;
+    m_diagLastMouseY = y;
 
     // note if we should ignore the move
     ignore = m_ignoreMouse;
@@ -723,6 +776,7 @@ ServerProxy::mouseMove()
 
     // if compressing then ignore the motion but record it
     if (m_compressMouse) {
+        ++m_diagMouseMoveCompressedCount;
         m_compressMouseRelative = false;
         ignore    = true;
         m_xMouse  = x;
@@ -734,8 +788,10 @@ ServerProxy::mouseMove()
 
     // forward
     if (!ignore) {
+        ++m_diagMouseMoveForwardedCount;
         m_client->mouseMove(x, y);
     }
+    logProtocolHealth();
 }
 
 void
@@ -745,6 +801,7 @@ ServerProxy::mouseRelativeMove()
     bool ignore;
     SInt16 dx, dy;
     ProtocolUtil::readf(m_stream, kMsgDMouseRelMove + 4, &dx, &dy);
+    ++m_diagMouseRelMoveCount;
 
     // note if we should ignore the move
     ignore = m_ignoreMouse;
@@ -766,6 +823,7 @@ ServerProxy::mouseRelativeMove()
     if (!ignore) {
         m_client->mouseRelativeMove(dx, dy);
     }
+    logProtocolHealth();
 }
 
 void

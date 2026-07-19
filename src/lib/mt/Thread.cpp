@@ -24,6 +24,8 @@
 #include "base/Log.h"
 #include "base/IJob.h"
 
+#include <exception>
+
 //
 // Thread
 //
@@ -149,6 +151,10 @@ void Thread::threadFunc(const std::function<void()>& func)
         LOG((CLOG_DEBUG1 "caught exit on thread 0x%08x", id));
     }
     catch (XBase& e) {
+        LOG((CLOG_ERR "exception on thread 0x%08x: %s", id, e.what()));
+        throw;
+    }
+    catch (std::exception& e) {
         LOG((CLOG_ERR "exception on thread 0x%08x: %s", id, e.what()));
         throw;
     }
