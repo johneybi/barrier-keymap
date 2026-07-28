@@ -50,8 +50,10 @@ findings against the source and server logs.
   macOS, and Linux.
 - The Windows installer from that run is installed. The server starts with a
   single `2560x1440` display and listens on port `24800`.
-- The test configuration has been corrected back to `F18`:
-  `right_alt.alone = f18` and `hangul.alone = f18`.
+- The current Windows test configuration temporarily emits `F18` because the
+  Mac handoff reported virtual key code 79 as its configured input-source
+  shortcut. This is not a project-wide choice: the output must match the
+  shortcut actually configured on the Mac under test.
 - Live mouse validation of `9ced9a63` is still pending. Do not treat the cursor
   regression as fixed until a Mac can move for 20 to 30 seconds and return to
   Windows through the left edge.
@@ -68,7 +70,9 @@ To avoid duplicate or conflicting work, the Mac side should either:
    or
 2. explicitly hand ownership of that change to the Windows side.
 
-Until one of those actions happens, the shared source cannot produce a Mac
-client that maps Barrier `F18` to macOS virtual key code 79. A server log that
-shows `F18` is therefore necessary but not sufficient evidence that
-input-source switching works.
+Until one of those actions happens, the shared source cannot reliably map a
+Barrier F17 through F19 event to the matching macOS virtual key. Before the
+next key test, the Mac side must report which function key is actually
+configured for input-source switching; the Windows remap must then emit that
+same key. A server log showing either F18 or F19 is necessary but not
+sufficient evidence that input-source switching works.
