@@ -193,3 +193,34 @@ reports `calls`, `bytes`, `maxCall`, `ready`, and `buffered` from
 `TCPSocket::doRead()`. Hundreds of calls with only a few forwarded positions
 would isolate the delay to event dispatch. Only two to four large read calls
 would instead implicate the macOS socket multiplexer wake-up path.
+
+## Confirmed macOS event queue fix
+
+The socket diagnostic showed that the Mac read continuously while Barrier
+dispatched only about two readiness events per second:
+
+- 219.6 socket reads per second;
+- 1.93 `inputReady` events per second;
+- 3.6 KB average unread buffer;
+- 462 mouse messages per second;
+- 2.97 forwarded mouse positions per second.
+
+The fix keeps macOS system events on the Carbon queue but stores Barrier user
+event IDs in a separate thread-safe FIFO. Carbon `Syne` events remain as the
+cross-thread wake-up mechanism. Because current macOS can leave those wake-ups
+pending for hundreds of milliseconds, `waitForEvent()` now bounds each Carbon
+wait to four milliseconds and checks the FIFO again.
+
+A live test was smooth. Across nine active one-second samples:
+
+- 832.2 mouse messages per second;
+- 203.7 forwarded mouse positions per second;
+- 260.7 socket reads per second;
+- 187.2 `inputReady` events per second;
+- 41 bytes average unread buffer.
+
+Forwarding improved from about 3 to 204 positions per second while the unread
+buffer fell from about 3.6 KB to 41 bytes. The test client used about 1.4% CPU
+after movement stopped. This confirms that delayed Carbon wake-up dispatch,
+not TCP delivery, packet parsing, VirtualHID, or key remapping, caused the
+severe input stutter.

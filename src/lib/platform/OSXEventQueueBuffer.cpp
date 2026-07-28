@@ -21,6 +21,8 @@
 #include "base/Event.h"
 #include "base/IEventQueue.h"
 
+#include <algorithm>
+
 //
 // EventQueueTimer
 //
@@ -30,6 +32,8 @@ class EventQueueTimer { };
 //
 // OSXEventQueueBuffer
 //
+
+static const double kUserEventPollInterval = 0.004;
 
 OSXEventQueueBuffer::OSXEventQueueBuffer(IEventQueue* events) :
     m_event(NULL),
@@ -56,6 +60,17 @@ OSXEventQueueBuffer::init()
 void
 OSXEventQueueBuffer::waitForEvent(double timeout)
 {
+    if (hasUserEvent()) {
+        return;
+    }
+
+    // PostEventToQueue can leave cross-thread Syne events pending for hundreds
+    // of milliseconds on current macOS releases.  Bound the Carbon wait so
+    // the user-event FIFO is checked often enough for interactive input.
+    if (timeout < 0.0 || timeout > kUserEventPollInterval) {
+        timeout = kUserEventPollInterval;
+    }
+
     EventRef event;
     ReceiveNextEvent(0, NULL, timeout, false, &event);
 }
@@ -67,6 +82,12 @@ OSXEventQueueBuffer::getEvent(Event& event, UInt32& dataID)
     if (m_event != NULL) {
         ReleaseEvent(m_event);
         m_event = NULL;
+    }
+
+    // Barrier events have their own FIFO.  Check it before the Carbon queue so
+    // socket readiness cannot sit behind a stream of synthetic system events.
+    if (popUserEvent(dataID)) {
+        return kUser;
     }
 
     // get the next event
@@ -84,8 +105,12 @@ OSXEventQueueBuffer::getEvent(Event& event, UInt32& dataID)
         UInt32 eventClass = GetEventClass(m_event);
         switch (eventClass) {
         case 'Syne':
-            dataID = GetEventKind(m_event);
-            return kUser;
+            // Syne is only a cross-thread wake-up.  The event ID is kept in
+            // m_userEvents so Barrier events can bypass Carbon queue ordering.
+            if (popUserEvent(dataID)) {
+                return kUser;
+            }
+            return kNone;
 
         default:
             event = Event(Event::kSystem,
@@ -108,6 +133,10 @@ OSXEventQueueBuffer::addEvent(UInt32 dataID)
                             &event);
 
     if (error == noErr) {
+        {
+            std::lock_guard<std::mutex> lock(m_userEventMutex);
+            m_userEvents.push_back(dataID);
+        }
 
         assert(m_carbonEventQueue != NULL);
 
@@ -117,6 +146,11 @@ OSXEventQueueBuffer::addEvent(UInt32 dataID)
             kEventPriorityHigh);
 
         ReleaseEvent(event);
+
+        if (error != noErr && !removeUserEvent(dataID)) {
+            // Another queue wake already delivered this event.
+            error = noErr;
+        }
     }
 
     return (error == noErr);
@@ -125,9 +159,47 @@ OSXEventQueueBuffer::addEvent(UInt32 dataID)
 bool
 OSXEventQueueBuffer::isEmpty() const
 {
+    if (hasUserEvent()) {
+        return false;
+    }
+
     EventRef event;
     OSStatus status = ReceiveNextEvent(0, NULL, 0.0, false, &event);
     return (status == eventLoopTimedOutErr);
+}
+
+bool
+OSXEventQueueBuffer::popUserEvent(UInt32& dataID)
+{
+    std::lock_guard<std::mutex> lock(m_userEventMutex);
+    if (m_userEvents.empty()) {
+        return false;
+    }
+
+    dataID = m_userEvents.front();
+    m_userEvents.pop_front();
+    return true;
+}
+
+bool
+OSXEventQueueBuffer::removeUserEvent(UInt32 dataID)
+{
+    std::lock_guard<std::mutex> lock(m_userEventMutex);
+    std::deque<UInt32>::iterator event =
+        std::find(m_userEvents.begin(), m_userEvents.end(), dataID);
+    if (event == m_userEvents.end()) {
+        return false;
+    }
+
+    m_userEvents.erase(event);
+    return true;
+}
+
+bool
+OSXEventQueueBuffer::hasUserEvent() const
+{
+    std::lock_guard<std::mutex> lock(m_userEventMutex);
+    return !m_userEvents.empty();
 }
 
 EventQueueTimer*
