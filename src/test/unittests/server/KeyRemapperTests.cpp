@@ -47,6 +47,28 @@ expectEvent(const KeyRemapper::KeyEvent& event,
 
 }
 
+TEST(KeyRemapperTests, emptyConfigPassesEventsThrough)
+{
+	KeyRemapper remapper;
+	KeyRemapper::KeyEventList down =
+		remapper.remapKeyDown("mac", 'a', KeyModifierShift, kCButton);
+	KeyRemapper::KeyEventList repeat =
+		remapper.remapKeyRepeat("mac", 'a', KeyModifierShift, 3, kCButton);
+	KeyRemapper::KeyEventList up =
+		remapper.remapKeyUp("mac", 'a', KeyModifierShift, kCButton);
+
+	ASSERT_EQ(1u, down.size());
+	expectEvent(down[0], KeyRemapper::KeyEvent::kDown, 'a',
+		KeyModifierShift, kCButton);
+	ASSERT_EQ(1u, repeat.size());
+	expectEvent(repeat[0], KeyRemapper::KeyEvent::kRepeat, 'a',
+		KeyModifierShift, kCButton);
+	EXPECT_EQ(3, repeat[0].m_count);
+	ASSERT_EQ(1u, up.size());
+	expectEvent(up[0], KeyRemapper::KeyEvent::kUp, 'a',
+		KeyModifierShift, kCButton);
+}
+
 TEST(KeyRemapperTests, simpleRemapTranslatesModifierKeyAndMask)
 {
 	KeyRemapConfig config;
