@@ -71,6 +71,8 @@ ready for other users.
 2. Confirm normal edge switching still works.
 3. On the `mac` screen, verify:
    - tapping `right_alt` sends plain `F19`.
+   - on a Korean Windows layout, tapping the Right Alt/`hangul` key sends
+     plain `F19`.
    - holding `right_alt` with another key uses the right Super modifier.
    - `control+space` sends an `F19` tap without leaving Control stuck down.
 4. On the `windows` screen, verify:

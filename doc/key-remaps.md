@@ -14,6 +14,8 @@ section: remaps
   mac:
     right_alt.alone = F19
     right_alt.hold = right_super
+    hangul.alone = F19
+    hangul.hold = right_super
     control+space = F19
 
   windows:
@@ -60,6 +62,17 @@ requires a matching `.alone` rule.
 
 The macOS example sends a plain `F19` when Right Alt is tapped, while using
 Right Super when Right Alt is held with another key.
+
+On a Windows server using the Korean keyboard layout, Windows reports the
+physical Right Alt key as `Hangul` instead of `Alt_R`. Configure both source
+rules when the same Barrier configuration may be used across keyboard layouts:
+
+```text
+right_alt.alone = F19
+right_alt.hold = right_super
+hangul.alone = F19
+hangul.hold = right_super
+```
 
 The Windows example maps a right Super tap to `Hangul`, while keeping right
 Super usable as a normal modifier when it is combined with another key.

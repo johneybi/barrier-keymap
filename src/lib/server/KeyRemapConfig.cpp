@@ -119,8 +119,8 @@ KeyRemapConfig
 KeyRemapConfig::makeDefault()
 {
 	KeyRemapConfig config;
-	config.addRule("mac", kKeyAlt_R, kKeySuper_R);
-	config.addTapRule("mac", kKeySuper_R, kKeyF19, kKeySuper_R);
+	config.addTapRule("mac", kKeyAlt_R, kKeyF19, kKeySuper_R);
+	config.addTapRule("mac", kKeyHangul, kKeyF19, kKeySuper_R);
 	config.addChordRule("mac", KeyModifierControl, ' ', 0, kKeyF19);
 	config.addRule("windows", kKeySuper_L, kKeyControl_L);
 	return config;

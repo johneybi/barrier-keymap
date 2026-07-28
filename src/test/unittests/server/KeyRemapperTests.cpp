@@ -21,6 +21,7 @@
 #include "server/Config.h"
 #include "server/KeyRemapper.h"
 
+#include "test/global/TestEventQueue.h"
 #include "test/global/gtest.h"
 
 #include <sstream>
@@ -115,6 +116,25 @@ TEST(KeyRemapperTests, rightAltTapSendsPlainF19AndHoldActsAsRightSuper)
 		KeyModifierSuper, kAltButton);
 	expectEvent(chord[1], KeyRemapper::KeyEvent::kDown, 'c',
 		KeyModifierSuper, kCButton);
+}
+
+TEST(KeyRemapperTests, windowsKoreanRightAltHangulTapSendsPlainF19)
+{
+	KeyRemapConfig config;
+	config.addTapRule("mac", kKeyHangul, kKeyF19, kKeySuper_R);
+
+	KeyRemapper remapper(config);
+	KeyRemapper::KeyEventList down =
+		remapper.remapKeyDown("mac", kKeyHangul, 0, kAltButton);
+	KeyRemapper::KeyEventList up =
+		remapper.remapKeyUp("mac", kKeyHangul, 0, kAltButton);
+
+	EXPECT_TRUE(down.empty());
+	ASSERT_EQ(2u, up.size());
+	expectEvent(up[0], KeyRemapper::KeyEvent::kDown, kKeyF19,
+		0, kAltButton);
+	expectEvent(up[1], KeyRemapper::KeyEvent::kUp, kKeyF19,
+		0, kAltButton);
 }
 
 TEST(KeyRemapperTests, tapRuleFlushesHoldBeforeChordKey)
@@ -262,5 +282,30 @@ TEST(KeyRemapperTests, configReadsHangulTapAlias)
 		config.getKeyRemapConfig().findTapRule("windows", kKeySuper_R);
 	ASSERT_TRUE(rule != NULL);
 	EXPECT_EQ(kKeyHangul, rule->m_aloneID);
+	EXPECT_EQ(kKeySuper_R, rule->m_holdID);
+}
+
+TEST(KeyRemapperTests, configReadsHangulSourceForWindowsKoreanRightAlt)
+{
+	TestEventQueue events;
+	Config config(&events);
+	std::stringstream stream;
+	stream
+		<< "section: screens\n"
+		<< "\tESKui-MacBookPro:\n"
+		<< "end\n"
+		<< "section: remaps\n"
+		<< "\tESKui-MacBookPro:\n"
+		<< "\t\thangul.alone = F19\n"
+		<< "\t\thangul.hold = right_super\n"
+		<< "end\n";
+
+	stream >> config;
+
+	const KeyRemapConfig::TapRule* rule =
+		config.getKeyRemapConfig().findTapRule(
+			"ESKui-MacBookPro", kKeyHangul);
+	ASSERT_NE(static_cast<const KeyRemapConfig::TapRule*>(NULL), rule);
+	EXPECT_EQ(kKeyF19, rule->m_aloneID);
 	EXPECT_EQ(kKeySuper_R, rule->m_holdID);
 }
