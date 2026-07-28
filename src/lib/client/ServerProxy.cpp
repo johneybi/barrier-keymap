@@ -39,6 +39,8 @@
 // ServerProxy
 //
 
+static const double kMaxMouseCompressionDelay = 0.008;
+
 ServerProxy::ServerProxy(Client* client, barrier::IStream* stream, IEventQueue* events) :
     m_client(client),
     m_stream(stream),
@@ -431,13 +433,16 @@ ServerProxy::flushCompressedMouse()
 {
     if (m_compressMouse) {
         m_compressMouse = false;
+        ++m_diagMouseMoveForwardedCount;
         m_client->mouseMove(m_xMouse, m_yMouse);
+        m_mouseFlushTimer.reset();
     }
     if (m_compressMouseRelative) {
         m_compressMouseRelative = false;
         m_client->mouseRelativeMove(m_dxMouse, m_dyMouse);
         m_dxMouse = 0;
         m_dyMouse = 0;
+        m_mouseFlushTimer.reset();
     }
 }
 
@@ -783,6 +788,9 @@ ServerProxy::mouseMove()
         m_yMouse  = y;
         m_dxMouse = 0;
         m_dyMouse = 0;
+        if (m_mouseFlushTimer.getTime() >= kMaxMouseCompressionDelay) {
+            flushCompressedMouse();
+        }
     }
     LOG((CLOG_DEBUG2 "recv mouse move %d,%d", x, y));
 
@@ -790,6 +798,7 @@ ServerProxy::mouseMove()
     if (!ignore) {
         ++m_diagMouseMoveForwardedCount;
         m_client->mouseMove(x, y);
+        m_mouseFlushTimer.reset();
     }
     logProtocolHealth();
 }
@@ -816,12 +825,16 @@ ServerProxy::mouseRelativeMove()
         ignore     = true;
         m_dxMouse += dx;
         m_dyMouse += dy;
+        if (m_mouseFlushTimer.getTime() >= kMaxMouseCompressionDelay) {
+            flushCompressedMouse();
+        }
     }
     LOG((CLOG_DEBUG2 "recv mouse relative move %d,%d", dx, dy));
 
     // forward
     if (!ignore) {
         m_client->mouseRelativeMove(dx, dy);
+        m_mouseFlushTimer.reset();
     }
     logProtocolHealth();
 }
