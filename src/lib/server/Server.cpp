@@ -44,7 +44,6 @@
 #include "base/Log.h"
 #include "base/TMethodEventJob.h"
 
-#include <algorithm>
 #include <cstring>
 #include <cstdlib>
 #include <sstream>
@@ -836,6 +835,8 @@ Server::avoidJumpZone(BaseClientProxy* dst,
 	// switch back, especially after the Windows primary cursor is warped.
 	SInt32 z = (dst == m_primaryClient) ?
 		getJumpZoneSize(dst) : kSecondaryScreenEntryInset;
+	const SInt32 xInset = (z < dw - 1) ? z : dw - 1;
+	const SInt32 yInset = (z < dh - 1) ? z : dh - 1;
 
 	// move in far enough to avoid the jump zone.  if entering a side
 	// that doesn't have a neighbor (i.e. an asymmetrical side) then we
@@ -844,25 +845,25 @@ Server::avoidJumpZone(BaseClientProxy* dst,
 	case kLeft:
 		if (!m_config->getNeighbor(dstName, kRight, t, NULL).empty() &&
 			x > dx + dw - 1 - z)
-			x = dx + dw - 1 - std::min(z, dw - 1);
+			x = dx + dw - 1 - xInset;
 		break;
 
 	case kRight:
 		if (!m_config->getNeighbor(dstName, kLeft, t, NULL).empty() &&
 			x < dx + z)
-			x = dx + std::min(z, dw - 1);
+			x = dx + xInset;
 		break;
 
 	case kTop:
 		if (!m_config->getNeighbor(dstName, kBottom, t, NULL).empty() &&
 			y > dy + dh - 1 - z)
-			y = dy + dh - 1 - std::min(z, dh - 1);
+			y = dy + dh - 1 - yInset;
 		break;
 
 	case kBottom:
 		if (!m_config->getNeighbor(dstName, kTop, t, NULL).empty() &&
 			y < dy + z)
-			y = dy + std::min(z, dh - 1);
+			y = dy + yInset;
 		break;
 
 	case kNoDirection:
