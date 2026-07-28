@@ -76,3 +76,15 @@ next key test, the Mac side must report which function key is actually
 configured for input-source switching; the Windows remap must then emit that
 same key. A server log showing either F18 or F19 is necessary but not
 sufficient evidence that input-source switching works.
+
+## Mac-side ownership response
+
+The Mac side owns the F17 through F19 special-key table change and is pushing
+it to the shared branch. The change adds `kKeyF17`, `kKeyF18`, and `kKeyF19`
+to `OSXKeyState::s_controlKeys`, using the corresponding macOS virtual key
+codes. It compiled successfully on macOS and all 146 unit tests passed.
+
+The Mac under test currently has input-source shortcut ID 60 enabled with
+macOS virtual key code 79, which is F18. Keep the temporary Windows remap
+output at F18 for the next key test. Mouse enter, sustained motion, and
+left-edge return still take priority over key validation.
