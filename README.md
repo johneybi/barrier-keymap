@@ -37,11 +37,11 @@ screen:
 ```text
 section: remaps
   mac:
-    right_alt.alone = F19
+    right_alt.alone = F16
     right_alt.hold = right_super
-    hangul.alone = F19
+    hangul.alone = F16
     hangul.hold = right_super
-    control+space = F19
+    control+space = F16
 
   windows:
     left_super = left_control
@@ -51,10 +51,12 @@ end
 
 Supported behavior includes direct key remaps, left/right modifier key names,
 tap-hold rules such as `right_alt.alone`, and hotkey-style chord remaps such
-as `control+space = F19`.
+as `control+space = F16`.
 
 See [server-side key remaps](doc/key-remaps.md) for the supported config subset,
-examples, limitations, and verification commands.
+examples, limitations, and verification commands. The
+[project roadmap](doc/project-roadmap.md) describes the optional extended
+function-key and Karabiner VirtualHID layers.
 
 ## Relationship to Barrier
 

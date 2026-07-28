@@ -26,47 +26,47 @@ TEST(SecureUtilsTest, FormatSslFingerprintHexWithSeparators)
 {
     auto fingerprint = generate_pseudo_random_bytes(0, 32);
     ASSERT_EQ(format_ssl_fingerprint(fingerprint, true),
-              "28:FD:0A:98:8A:0E:A1:6C:D7:E8:6C:A7:EE:58:41:71:"
-              "CA:B2:8E:49:25:94:90:25:26:05:8D:AF:63:ED:2E:30");
+              "3E:8B:B9:EE:AC:EE:2F:E8:66:19:13:F8:8E:06:38:41:"
+              "F3:49:75:9C:0F:F1:62:CA:2C:2F:1A:2A:DF:69:B8:97");
 }
 
 TEST(SecureUtilsTest, CreateFingerprintRandomArt)
 {
     ASSERT_EQ(create_fingerprint_randomart(generate_pseudo_random_bytes(0, 32)),
               "+-----------------+\n"
-              "|*X+. .           |\n"
-              "|*oo +            |\n"
-              "| + =             |\n"
-              "|  B  . .         |\n"
-              "|.+... o S        |\n"
-              "|E+ ++. .         |\n"
-              "|B*++..  .        |\n"
-              "|+o*o o .         |\n"
-              "|+o*Bo .          |\n"
+              "|    ...oo        |\n"
+              "| o .  .+.        |\n"
+              "|..+ .  oo.       |\n"
+              "|o .oo o ..       |\n"
+              "|.o o +  S        |\n"
+              "|+ + o  .         |\n"
+              "|.= B o  o        |\n"
+              "|+.X.Eo o o       |\n"
+              "|+*+***O..        |\n"
               "+-----------------+");
     ASSERT_EQ(create_fingerprint_randomart(generate_pseudo_random_bytes(1, 32)),
               "+-----------------+\n"
-              "|  .oo+ .    .B=. |\n"
-              "| .o.+ . o   o.=  |\n"
-              "|o..+.. o . E *   |\n"
-              "|oo..+ .   * *    |\n"
-              "|B o.....S. o .   |\n"
-              "|+=o.....         |\n"
-              "| + + .           |\n"
-              "|o. ..            |\n"
-              "|..o..            |\n"
+              "|%+=+++           |\n"
+              "|o=oo=o           |\n"
+              "|oo +  o          |\n"
+              "|..= .+ =         |\n"
+              "|o.oEo @ S        |\n"
+              "| +o  @           |\n"
+              "|.+ .+ .          |\n"
+              "|+.oo o           |\n"
+              "|oooo+            |\n"
               "+-----------------+");
     ASSERT_EQ(create_fingerprint_randomart(generate_pseudo_random_bytes(2, 32)),
               "+-----------------+\n"
-              "|    ...     .o.o.|\n"
-              "|     o       .=.E|\n"
-              "|    . + o   ...+.|\n"
-              "|     * o = o ... |\n"
-              "|    * + S & .    |\n"
-              "|     = + % @     |\n"
-              "|    . . = X o    |\n"
-              "|     . . O .     |\n"
-              "|        . +      |\n"
+              "|    .o...o*==+ +.|\n"
+              "|     ..  ++Xo + .|\n"
+              "|      + o + *  . |\n"
+              "|     . = o + =...|\n"
+              "|        S . E o.=|\n"
+              "|       .   o * * |\n"
+              "|        + o . *  |\n"
+              "|       o o   o   |\n"
+              "|        .   .    |\n"
               "+-----------------+");
 }
 

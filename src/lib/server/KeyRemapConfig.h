@@ -65,7 +65,6 @@ public:
 	typedef std::vector<TapRule> TapRuleList;
 	typedef std::vector<ChordRule> ChordRuleList;
 
-	static KeyRemapConfig makeDefault();
 	static std::string normalizeScreen(const std::string& screen);
 
 	void addRule(const std::string& screen, KeyID fromID, KeyID toID);

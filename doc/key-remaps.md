@@ -1,9 +1,9 @@
 # Server-side key remaps
 
-This fork can remap keyboard input on the Barrier server before the event is
-relayed to the active client screen. This keeps Barrier's normal mouse edge
-switching behavior, while avoiding per-client tools such as Karabiner-Elements
-or AutoHotkey for the supported remap subset.
+This branch can remap keyboard input on the Barrier server before the event is
+relayed to the active client screen. It works independently for the supported
+subset and can also normalize remote input before an optional client-side tool
+such as Karabiner-Elements applies more advanced rules.
 
 Remaps are configured in a `section: remaps` block. Put this section after
 `section: screens`, because remap targets are validated against known screen
@@ -12,11 +12,11 @@ names.
 ```text
 section: remaps
   mac:
-    right_alt.alone = F19
+    right_alt.alone = F16
     right_alt.hold = right_super
-    hangul.alone = F19
+    hangul.alone = F16
     hangul.hold = right_super
-    control+space = F19
+    control+space = F16
 
   windows:
     left_super = left_control
@@ -40,7 +40,7 @@ key remaps. Remaps are applied once and are not chained into another rule.
 ### Tap-hold remap
 
 ```text
-right_alt.alone = F19
+right_alt.alone = F16
 right_alt.hold = right_super
 ```
 
@@ -60,7 +60,7 @@ the next key.
 If `.hold` is omitted, the source key is used as the hold key. A `.hold` rule
 requires a matching `.alone` rule.
 
-The macOS example sends a plain `F19` when Right Alt is tapped, while using
+The macOS example sends a plain `F16` when Right Alt is tapped, while using
 Right Super when Right Alt is held with another key.
 
 On a Windows server using the Korean keyboard layout, Windows reports the
@@ -68,9 +68,9 @@ physical Right Alt key as `Hangul` instead of `Alt_R`. Configure both source
 rules when the same Barrier configuration may be used across keyboard layouts:
 
 ```text
-right_alt.alone = F19
+right_alt.alone = F16
 right_alt.hold = right_super
-hangul.alone = F19
+hangul.alone = F16
 hangul.hold = right_super
 ```
 
@@ -80,7 +80,7 @@ Super usable as a normal modifier when it is combined with another key.
 ### Modifier chord remap
 
 ```text
-control+space = F19
+control+space = F16
 ```
 
 A chord rule matches an exact generic modifier mask plus a non-modifier key. For
@@ -118,6 +118,9 @@ Chord modifiers use generic names: `shift`, `control`/`ctrl`, `alt`/`option`,
   chord masks.
 - Chord remaps are hotkey taps, not holdable replacement keys.
 - The tap-hold timeout is currently fixed at 200 ms.
+- The upstream macOS client maps function keys through F16. Using F17-F19
+  requires the optional extended-key client layer described in the project
+  roadmap.
 
 ## Verification
 

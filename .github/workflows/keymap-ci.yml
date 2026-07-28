@@ -1,0 +1,58 @@
+name: Keymap CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - "**"
+
+jobs:
+  build-and-test:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libavahi-compat-libdnssd-dev \
+            libcurl4-openssl-dev \
+            libssl-dev \
+            libx11-dev \
+            libxext-dev \
+            libxi-dev \
+            libxinerama-dev \
+            libxrandr-dev \
+            libxtst-dev \
+            pkg-config
+
+      - name: Install macOS dependencies
+        if: runner.os == 'macOS'
+        run: brew install openssl
+
+      - name: Configure
+        run: |
+          cmake -S . -B build \
+            -DBARRIER_BUILD_GUI=OFF \
+            -DBARRIER_BUILD_TESTS=ON \
+            -DBARRIER_BUILD_INSTALLER=OFF \
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+
+      - name: Build
+        run: cmake --build build --target barriers unittests --parallel
+
+      - name: Test
+        run: ./build/bin/unittests
