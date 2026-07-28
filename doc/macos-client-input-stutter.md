@@ -159,3 +159,31 @@ As a focused test, internal Barrier events are now posted with
 VirtualHID behavior. A live Mac test should compare `protocol health` batch
 frequency and pointer smoothness before considering a larger replacement of
 the deprecated Carbon queue integration.
+
+## High-priority event test result
+
+The macOS client at commit `de1ecfab` was rebuilt and tested with
+`kEventPriorityHigh`. The pointer remained severely stuttery.
+
+For active one-second samples with at least 100 mouse messages:
+
+- 26 samples covering 26.23 seconds;
+- `mouse=11,168`;
+- `forwarded=76`;
+- `compressed=11,164`;
+- 425.8 received mouse messages per second;
+- 2.90 forwarded positions per second;
+- 99.96% of received messages entered the compression path;
+- per-sample `mouse` range of 175 to 808;
+- per-sample `forwarded` range of 2 to 4.
+
+Only 0.681% as many positions were forwarded as mouse messages received. The
+eight millisecond compression cap was active, but each readiness dispatch
+still delivered a short burst followed by a long wait. Raising the Carbon event
+priority therefore did not restore timely socket-readiness dispatch.
+
+The next macOS experiment should measure `OSXEventQueueBuffer::waitForEvent()`
+and `TCPSocket::doRead()` timestamps directly. If they confirm that the Carbon
+queue remains the delay boundary, replace the legacy Carbon wake-up with a
+condition-variable, pipe, or another native run-loop wake-up that cannot merge
+hundreds of socket messages behind one pending `Syne` event.
