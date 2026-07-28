@@ -21,8 +21,6 @@
 #include "base/Event.h"
 #include "base/IEventQueue.h"
 
-#include <algorithm>
-
 //
 // EventQueueTimer
 //
@@ -38,7 +36,8 @@ static const double kUserEventPollInterval = 0.004;
 OSXEventQueueBuffer::OSXEventQueueBuffer(IEventQueue* events) :
     m_event(NULL),
     m_eventQueue(events),
-    m_carbonEventQueue(NULL)
+    m_carbonEventQueue(NULL),
+    m_wakeupPending(false)
 {
     // do nothing
 }
@@ -105,6 +104,7 @@ OSXEventQueueBuffer::getEvent(Event& event, UInt32& dataID)
         UInt32 eventClass = GetEventClass(m_event);
         switch (eventClass) {
         case 'Syne':
+            clearWakeupPending();
             // Syne is only a cross-thread wake-up.  The event ID is kept in
             // m_userEvents so Barrier events can bypass Carbon queue ordering.
             if (popUserEvent(dataID)) {
@@ -123,6 +123,23 @@ OSXEventQueueBuffer::getEvent(Event& event, UInt32& dataID)
 bool
 OSXEventQueueBuffer::addEvent(UInt32 dataID)
 {
+    bool postWakeup = false;
+    {
+        std::lock_guard<std::mutex> lock(m_userEventMutex);
+        const bool wasEmpty = m_userEvents.empty();
+        m_userEvents.push_back(dataID);
+        if (wasEmpty && !m_wakeupPending) {
+            m_wakeupPending = true;
+            postWakeup = true;
+        }
+    }
+
+    // The FIFO is polled at a bounded interval, so one outstanding Carbon
+    // event is enough to wake the loop without accumulating stale Syne events.
+    if (!postWakeup) {
+        return true;
+    }
+
     EventRef event;
     OSStatus error = CreateEvent(
                             kCFAllocatorDefault,
@@ -133,11 +150,6 @@ OSXEventQueueBuffer::addEvent(UInt32 dataID)
                             &event);
 
     if (error == noErr) {
-        {
-            std::lock_guard<std::mutex> lock(m_userEventMutex);
-            m_userEvents.push_back(dataID);
-        }
-
         assert(m_carbonEventQueue != NULL);
 
         error = PostEventToQueue(
@@ -146,14 +158,15 @@ OSXEventQueueBuffer::addEvent(UInt32 dataID)
             kEventPriorityStandard);
 
         ReleaseEvent(event);
-
-        if (error != noErr && !removeUserEvent(dataID)) {
-            // Another queue wake already delivered this event.
-            error = noErr;
-        }
     }
 
-    return (error == noErr);
+    if (error != noErr) {
+        clearWakeupPending();
+    }
+
+    // The user event is already stored in the FIFO.  A failed Carbon wake is
+    // recovered by the four millisecond poll in waitForEvent().
+    return true;
 }
 
 bool
@@ -182,24 +195,17 @@ OSXEventQueueBuffer::popUserEvent(UInt32& dataID)
 }
 
 bool
-OSXEventQueueBuffer::removeUserEvent(UInt32 dataID)
-{
-    std::lock_guard<std::mutex> lock(m_userEventMutex);
-    std::deque<UInt32>::iterator event =
-        std::find(m_userEvents.begin(), m_userEvents.end(), dataID);
-    if (event == m_userEvents.end()) {
-        return false;
-    }
-
-    m_userEvents.erase(event);
-    return true;
-}
-
-bool
 OSXEventQueueBuffer::hasUserEvent() const
 {
     std::lock_guard<std::mutex> lock(m_userEventMutex);
     return !m_userEvents.empty();
+}
+
+void
+OSXEventQueueBuffer::clearWakeupPending()
+{
+    std::lock_guard<std::mutex> lock(m_userEventMutex);
+    m_wakeupPending = false;
 }
 
 EventQueueTimer*

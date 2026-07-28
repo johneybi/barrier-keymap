@@ -44,12 +44,13 @@ public:
 
 private:
     bool                popUserEvent(UInt32& dataID);
-    bool                removeUserEvent(UInt32 dataID);
     bool                hasUserEvent() const;
+    void                clearWakeupPending();
 
     EventRef            m_event;
     IEventQueue*        m_eventQueue;
     EventQueueRef        m_carbonEventQueue;
     mutable std::mutex  m_userEventMutex;
     std::deque<UInt32>  m_userEvents;
+    bool                m_wakeupPending;
 };
