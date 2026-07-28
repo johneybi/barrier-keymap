@@ -1361,6 +1361,10 @@ MSWindowsScreen::onMouseMove(SInt32 mx, SInt32 my)
         // secondary screen.
         LOG((CLOG_DEBUG5 "warping server cursor to center: %+d,%+d", m_xCenter, m_yCenter));
         warpCursorNoFlush(m_xCenter, m_yCenter);
+        // Keep the delta origin in sync immediately.  The queued PRE_WARP
+        // marker does this too, but high-rate mouse input can otherwise
+        // enqueue another edge position before that marker is dispatched.
+        saveMousePosition(m_xCenter, m_yCenter);
 
         // examine the motion.  if it's about the distance
         // from the center of the screen to an edge then
@@ -1373,7 +1377,7 @@ MSWindowsScreen::onMouseMove(SInt32 mx, SInt32 my)
             -y + bogusZoneSize > m_yCenter - m_y ||
              y + bogusZoneSize > m_y + m_h - m_yCenter) {
 
-            LOG((CLOG_DEBUG "dropped bogus delta motion: %+d,%+d", x, y));
+            LOG((CLOG_DEBUG2 "dropped bogus delta motion: %+d,%+d", x, y));
         }
         else {
             // send motion
