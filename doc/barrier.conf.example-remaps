@@ -16,9 +16,8 @@ end
 
 section: remaps
 	mac:
-		right_alt = right_super
-		right_super.alone = F19
-		right_super.hold = right_super
+		right_alt.alone = F19
+		right_alt.hold = right_super
 		control+space = F19
 
 	windows:
