@@ -34,3 +34,41 @@ The Mac client special-key table only included F1 through F16. A local,
 not-yet-pushed Mac change adds F17 through F19. It builds successfully and all
 146 unit tests pass, but live validation must wait until mouse control is
 stable.
+
+## Windows-side status after this handoff
+
+The Windows side pulled this document at commit `00024b3c` and confirmed the
+findings against the source and server logs.
+
+- The first recentering fix, `9c7882b5`, was not sufficient. Deltas around
+  `+1266` through `+1270` passed the old half-screen heuristic and were sent to
+  the Mac, keeping the remote cursor at the right edge.
+- Commit `9ced9a63` now checks for stale edge events before issuing another
+  cursor warp. It also avoids feeding a discarded edge coordinate back into
+  the next-delta origin.
+- GitHub Release run `30386514354` built `9ced9a63` successfully for Windows,
+  macOS, and Linux.
+- The Windows installer from that run is installed. The server starts with a
+  single `2560x1440` display and listens on port `24800`.
+- The test configuration has been corrected back to `F18`:
+  `right_alt.alone = f18` and `hangul.alone = f18`.
+- Live mouse validation of `9ced9a63` is still pending. Do not treat the cursor
+  regression as fixed until a Mac can move for 20 to 30 seconds and return to
+  Windows through the left edge.
+
+## Coordination required
+
+The F17 through F19 macOS key-table change described above is not present in
+the shared branch as of `00024b3c`. This statement does not imply that another
+push will happen automatically.
+
+To avoid duplicate or conflicting work, the Mac side should either:
+
+1. push the already-tested F17 through F19 change and report its commit hash,
+   or
+2. explicitly hand ownership of that change to the Windows side.
+
+Until one of those actions happens, the shared source cannot produce a Mac
+client that maps Barrier `F18` to macOS virtual key code 79. A server log that
+shows `F18` is therefore necessary but not sufficient evidence that
+input-source switching works.
