@@ -74,7 +74,7 @@ crypto setting. It showed the same severe stutter. This A/B result rules out
 the key remapper, macOS VirtualHID work, protocol diagnostics, and the client
 latency patch as the primary cause of the current symptom.
 
-## Current leading cause: verbose server logging
+## Server logging finding
 
 The committed Windows test logs show the server running at `DEBUG1`. At an
 unlinked screen edge, every movement can synchronously write both:
@@ -90,16 +90,21 @@ Measured in the existing logs:
 - 34,157 `try to leave` or `no neighbor` lines;
 - 39,773 total lines and about 2.37 MB across the three test logs.
 
-This is consistent with the Mac receiving hundreds of mouse messages in only
-two to four batches per second. It also explains why the original client
-stutters against the current server even though it was smooth in the earlier
-test.
+This can amplify stalls and makes `DEBUG1` unsuitable for performance tests.
+The high-frequency edge messages have therefore been raised to `DEBUG2`.
+
+However, a later Windows run used `DEBUG`, not `DEBUG1`, and did not emit these
+per-motion edge lines. The Mac still showed severe stutter while TCP remained
+established and the server logged no keep-alive death or disconnect. Verbose
+logging is therefore an aggravating factor, but it does not explain the current
+symptom by itself.
 
 ## Next Windows test
 
-Run the Windows server at `INFO` or `NOTE`, with `DEBUG1`/`DEBUG2` disabled.
-Avoid a verbose file logger for this test. The once-per-second `switch health`
-line remains available at `INFO`.
+Build and install a Windows server containing the secondary-entry inset, then
+run it at `INFO` or `NOTE`, with `DEBUG1`/`DEBUG2` disabled. Avoid a verbose
+file logger for this test. The once-per-second `switch health` line remains
+available at `INFO`.
 
 Then connect either Mac client and compare:
 
@@ -112,7 +117,7 @@ Commit `fa942057` insets secondary-screen entry coordinates and may fix the
 edge bounce. It does not address delayed motion while the pointer is already
 inside the Mac screen, so test the logging level independently.
 
-If the `INFO` run is smooth, keep production defaults at `INFO` or `NOTE` and
-rate-limit or raise the high-frequency edge messages above `DEBUG1`. If it
-still stutters, capture TCP packet timestamps on both hosts before changing
-more input code.
+If it still stutters, capture TCP packet timestamps on both hosts. Compare when
+the Windows server queues and sends mouse protocol messages with when macOS
+receives each batch. TCP already has `TCP_NODELAY` enabled in `TCPSocket`, so
+the timestamps are needed before changing socket buffering or event scheduling.

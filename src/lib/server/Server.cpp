@@ -876,13 +876,13 @@ Server::isSwitchOkay(BaseClientProxy* newScreen,
 				EDirection dir, SInt32 x, SInt32 y,
 				SInt32 xActive, SInt32 yActive)
 {
-	LOG((CLOG_DEBUG1 "try to leave \"%s\" on %s", getName(m_active).c_str(), Config::dirName(dir)));
+	LOG((CLOG_DEBUG2 "try to leave \"%s\" on %s", getName(m_active).c_str(), Config::dirName(dir)));
 
 	// is there a neighbor?
 	if (newScreen == NULL) {
 		// there's no neighbor.  we don't want to switch and we don't
 		// want to try to switch later.
-		LOG((CLOG_DEBUG1 "no neighbor %s", Config::dirName(dir)));
+		LOG((CLOG_DEBUG2 "no neighbor %s", Config::dirName(dir)));
 		stopSwitch();
 		return false;
 	}
