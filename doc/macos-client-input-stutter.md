@@ -121,3 +121,41 @@ If it still stutters, capture TCP packet timestamps on both hosts. Compare when
 the Windows server queues and sends mouse protocol messages with when macOS
 receives each batch. TCP already has `TCP_NODELAY` enabled in `TCPSocket`, so
 the timestamps are needed before changing socket buffering or event scheduling.
+
+## Windows packet capture result
+
+A Windows `pktmon` capture filtered to `192.168.0.40:24800` recorded a
+continuous movement test at the physical NIC:
+
+- 11,054 Windows-to-Mac data packets over 63.1 seconds;
+- 11,039 mouse-sized packets with a 12-byte TCP payload;
+- 1.986 ms median transmit gap and 5.017 ms 90th-percentile gap;
+- roughly 170 to 585 transmitted mouse packets per active second.
+
+The Mac TCP stack acknowledged the movement stream continuously:
+
+- 5,636 ACKs during the 30-second movement interval;
+- 3.411 ms median ACK gap and 8.782 ms 90th-percentile gap;
+- cumulative ACKs advanced mostly in 12, 24, or 36-byte increments.
+
+Therefore the Windows socket multiplexer, NIC transmission, Wi-Fi path, and
+Mac kernel TCP reception are not producing the observed two-to-four batches
+per second. The delay occurs after bytes reach the Mac TCP stack and before
+Barrier dispatches `ServerProxy::handleData()`.
+
+## macOS event queue hypothesis
+
+`TCPSocket::doRead()` posts `inputReady` through `EventQueue`, but macOS replaces
+the normal condition-variable buffer with `OSXEventQueueBuffer`. That legacy
+buffer posts Barrier's internal `Syne` events to the Carbon event queue at
+`kEventPriorityStandard`. If the event is delayed, the socket thread continues
+filling its input buffer without posting another readiness event because the
+buffer is no longer empty. When Carbon finally dispatches the pending event,
+`ServerProxy::handleData()` drains hundreds of accumulated mouse messages in
+one batch.
+
+As a focused test, internal Barrier events are now posted with
+`kEventPriorityHigh`. This does not change packet parsing, mouse coalescing, or
+VirtualHID behavior. A live Mac test should compare `protocol health` batch
+frequency and pointer smoothness before considering a larger replacement of
+the deprecated Carbon queue integration.

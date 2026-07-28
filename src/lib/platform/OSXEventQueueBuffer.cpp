@@ -114,7 +114,7 @@ OSXEventQueueBuffer::addEvent(UInt32 dataID)
         error = PostEventToQueue(
             m_carbonEventQueue,
             event,
-            kEventPriorityStandard);
+            kEventPriorityHigh);
 
         ReleaseEvent(event);
     }
