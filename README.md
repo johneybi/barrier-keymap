@@ -39,6 +39,8 @@ section: remaps
   mac:
     right_alt.alone = F19
     right_alt.hold = right_super
+    hangul.alone = F19
+    hangul.hold = right_super
     control+space = F19
 
   windows:
