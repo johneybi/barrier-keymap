@@ -1339,10 +1339,9 @@ MSWindowsScreen::onMouseMove(SInt32 mx, SInt32 my)
         return true;
     }
 
-    // save position to compute delta of next motion
-    saveMousePosition(mx, my);
-
     if (m_isOnScreen) {
+        // save position to compute delta of next motion
+        saveMousePosition(mx, my);
 
         // motion on primary screen
         sendEvent(
@@ -1355,6 +1354,23 @@ MSWindowsScreen::onMouseMove(SInt32 mx, SInt32 my)
     }
     else
     {
+        // Examine the motion before warping again.  At high input rates,
+        // edge events queued before the previous warp can arrive after its
+        // POST_WARP marker.  Re-warping for each one creates a self-sustaining
+        // stream of bogus half-screen deltas.
+        static const SInt32 bogusZoneSize = 64;
+        if (-x + bogusZoneSize >= m_xCenter - m_x ||
+             x + bogusZoneSize >= m_x + m_w - m_xCenter ||
+            -y + bogusZoneSize >= m_yCenter - m_y ||
+             y + bogusZoneSize >= m_y + m_h - m_yCenter) {
+            saveMousePosition(m_xCenter, m_yCenter);
+            LOG((CLOG_DEBUG2 "dropped bogus delta motion: %+d,%+d", x, y));
+            return true;
+        }
+
+        // Send the valid delta before resetting the local cursor origin.
+        sendEvent(m_events->forIPrimaryScreen().motionOnSecondary(), MotionInfo::alloc(x, y));
+
         // the motion is on the secondary screen, so we warp mouse back to
         // center on the server screen. if we don't do this, then the mouse
         // will always try to return to the original entry point on the
@@ -1365,24 +1381,6 @@ MSWindowsScreen::onMouseMove(SInt32 mx, SInt32 my)
         // marker does this too, but high-rate mouse input can otherwise
         // enqueue another edge position before that marker is dispatched.
         saveMousePosition(m_xCenter, m_yCenter);
-
-        // examine the motion.  if it's about the distance
-        // from the center of the screen to an edge then
-        // it's probably a bogus motion that we want to
-        // ignore (see warpCursorNoFlush() for a further
-        // description).
-        static SInt32 bogusZoneSize = 10;
-        if (-x + bogusZoneSize > m_xCenter - m_x ||
-             x + bogusZoneSize > m_x + m_w - m_xCenter ||
-            -y + bogusZoneSize > m_yCenter - m_y ||
-             y + bogusZoneSize > m_y + m_h - m_yCenter) {
-
-            LOG((CLOG_DEBUG2 "dropped bogus delta motion: %+d,%+d", x, y));
-        }
-        else {
-            // send motion
-            sendEvent(m_events->forIPrimaryScreen().motionOnSecondary(), MotionInfo::alloc(x, y));
-        }
     }
 
     return true;
