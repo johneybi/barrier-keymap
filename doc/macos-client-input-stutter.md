@@ -187,3 +187,9 @@ and `TCPSocket::doRead()` timestamps directly. If they confirm that the Carbon
 queue remains the delay boundary, replace the legacy Carbon wake-up with a
 condition-variable, pipe, or another native run-loop wake-up that cannot merge
 hundreds of socket messages behind one pending `Syne` event.
+
+The next diagnostic build logs `socket read health` once per active second. It
+reports `calls`, `bytes`, `maxCall`, `ready`, and `buffered` from
+`TCPSocket::doRead()`. Hundreds of calls with only a few forwarded positions
+would isolate the delay to event dispatch. Only two to four large read calls
+would instead implicate the macOS socket multiplexer wake-up path.

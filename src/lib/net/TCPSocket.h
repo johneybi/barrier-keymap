@@ -24,6 +24,7 @@
 #include "mt/CondVar.h"
 #include "mt/Mutex.h"
 #include "arch/IArchNetwork.h"
+#include "base/Stopwatch.h"
 #include <memory>
 
 class Mutex;
@@ -111,4 +112,9 @@ private:
     ArchSocket            m_socket;
     CondVar<bool>        m_flushed;
     SocketMultiplexer*    m_socketMultiplexer;
+    Stopwatch            m_readHealthTimer;
+    UInt32                m_readHealthCalls;
+    UInt32                m_readHealthBytes;
+    UInt32                m_readHealthMaxCallBytes;
+    UInt32                m_readHealthReadyEvents;
 };

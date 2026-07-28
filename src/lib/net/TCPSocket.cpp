@@ -40,7 +40,11 @@ TCPSocket::TCPSocket(IEventQueue* events, SocketMultiplexer* socketMultiplexer, 
     m_events(events),
     m_mutex(),
     m_flushed(&m_mutex, true),
-    m_socketMultiplexer(socketMultiplexer)
+    m_socketMultiplexer(socketMultiplexer),
+    m_readHealthCalls(0),
+    m_readHealthBytes(0),
+    m_readHealthMaxCallBytes(0),
+    m_readHealthReadyEvents(0)
 {
     try {
         m_socket = ARCH->newSocket(family, IArchNetwork::kSTREAM);
@@ -60,7 +64,11 @@ TCPSocket::TCPSocket(IEventQueue* events, SocketMultiplexer* socketMultiplexer, 
     m_mutex(),
     m_socket(socket),
     m_flushed(&m_mutex, true),
-    m_socketMultiplexer(socketMultiplexer)
+    m_socketMultiplexer(socketMultiplexer),
+    m_readHealthCalls(0),
+    m_readHealthBytes(0),
+    m_readHealthMaxCallBytes(0),
+    m_readHealthReadyEvents(0)
 {
     assert(m_socket != NULL);
 
@@ -333,6 +341,7 @@ TCPSocket::doRead()
     UInt8 buffer[4096];
     memset(buffer, 0, sizeof(buffer));
     size_t bytesRead = 0;
+    UInt32 callBytes = 0;
 
     bytesRead = ARCH->readSocket(m_socket, buffer, sizeof(buffer));
 
@@ -342,6 +351,7 @@ TCPSocket::doRead()
         // slurp up as much as possible
         do {
             m_inputBuffer.write(buffer, (UInt32)bytesRead);
+            callBytes += (UInt32)bytesRead;
 
             if (m_inputBuffer.getSize() > MAX_INPUT_BUFFER_SIZE) {
                 break;
@@ -353,6 +363,28 @@ TCPSocket::doRead()
         // send input ready if input buffer was empty
         if (wasEmpty) {
             sendEvent(m_events->forIStream().inputReady());
+            ++m_readHealthReadyEvents;
+        }
+
+        ++m_readHealthCalls;
+        m_readHealthBytes += callBytes;
+        if (callBytes > m_readHealthMaxCallBytes) {
+            m_readHealthMaxCallBytes = callBytes;
+        }
+        if (m_readHealthTimer.getTime() >= 1.0) {
+            LOG((CLOG_INFO "socket read health %.2fs: socket=%08X calls=%u bytes=%u maxCall=%u ready=%u buffered=%u",
+                m_readHealthTimer.getTime(),
+                m_socket,
+                m_readHealthCalls,
+                m_readHealthBytes,
+                m_readHealthMaxCallBytes,
+                m_readHealthReadyEvents,
+                m_inputBuffer.getSize()));
+            m_readHealthCalls = 0;
+            m_readHealthBytes = 0;
+            m_readHealthMaxCallBytes = 0;
+            m_readHealthReadyEvents = 0;
+            m_readHealthTimer.reset();
         }
     }
     else {
