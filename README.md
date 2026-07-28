@@ -24,6 +24,45 @@ Master branch overall build status: [![Build Status](https://dev.azure.com/debau
 
 Our CI Builds are provided by Microsoft Azure Pipelines, Flathub, and Canonical.
 
+## Server-side key remapping
+
+This branch adds target-screen-aware key remapping before Barrier relays input
+to a client. It supports direct key replacement, modifier chords, and tap-hold
+rules such as using Right Alt as a function key when tapped and Right Super
+when held.
+
+Remaps are configured in a `section: remaps` block and can be scoped per target
+screen:
+
+```text
+section: remaps
+  mac:
+    right_alt.alone = F19
+    right_alt.hold = right_super
+    control+space = F19
+
+  windows:
+    left_super = left_control
+    right_super.alone = hangul
+end
+```
+
+Supported behavior includes direct key remaps, left/right modifier key names,
+tap-hold rules such as `right_alt.alone`, and hotkey-style chord remaps such
+as `control+space = F19`.
+
+See [server-side key remaps](doc/key-remaps.md) for the supported config subset,
+examples, limitations, and verification commands.
+
+## Relationship to Barrier
+
+This is an unofficial modified build of Barrier focused on server-side key
+remapping. It is not affiliated with or endorsed by the upstream Barrier
+maintainers.
+
+The original Barrier project and its package ecosystem remain available from
+the upstream repository at <https://github.com/debauchee/barrier>.
+
 ### What is it?
 
 Barrier is software that mimics the functionality of a KVM switch, which historically would allow you to use a single keyboard and mouse to control multiple computers by physically turning a dial on the box to switch the machine you're controlling at any given moment. Barrier does this in software, allowing you to tell it which machine to control by moving your mouse to the edge of the screen, or by using a keypress to switch focus to a different system.

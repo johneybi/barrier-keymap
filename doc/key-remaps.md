@@ -12,9 +12,8 @@ names.
 ```text
 section: remaps
   mac:
-    right_alt = right_super
-    right_super.alone = F19
-    right_super.hold = right_super
+    right_alt.alone = F19
+    right_alt.hold = right_super
     control+space = F19
 
   windows:
@@ -34,13 +33,13 @@ left_super = left_control
 
 A key remap changes the key ID and translates the corresponding modifier mask
 while the key is held. Left and right modifier key IDs are supported for direct
-key remaps.
+key remaps. Remaps are applied once and are not chained into another rule.
 
 ### Tap-hold remap
 
 ```text
-right_super.alone = F19
-right_super.hold = right_super
+right_alt.alone = F19
+right_alt.hold = right_super
 ```
 
 or:
@@ -58,6 +57,9 @@ the next key.
 
 If `.hold` is omitted, the source key is used as the hold key. A `.hold` rule
 requires a matching `.alone` rule.
+
+The macOS example sends a plain `F19` when Right Alt is tapped, while using
+Right Super when Right Alt is held with another key.
 
 The Windows example maps a right Super tap to `Hangul`, while keeping right
 Super usable as a normal modifier when it is combined with another key.
