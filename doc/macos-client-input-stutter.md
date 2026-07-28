@@ -224,3 +224,9 @@ buffer fell from about 3.6 KB to 41 bytes. The test client used about 1.4% CPU
 after movement stopped. This confirms that delayed Carbon wake-up dispatch,
 not TCP delivery, packet parsing, VirtualHID, or key remapping, caused the
 severe input stutter.
+
+The wake-up is coalesced so at most one Carbon `Syne` event is outstanding for
+the FIFO. Without coalescing, FIFO polling can consume Barrier events before
+their corresponding Carbon wake-ups, leaving thousands of stale system events
+to drain after sustained mouse movement. Carbon posting is now best-effort:
+the FIFO owns delivery and the four millisecond poll recovers a failed wake.
