@@ -21,6 +21,8 @@
 #include "base/IEventQueueBuffer.h"
 
 #include <Carbon/Carbon.h>
+#include <deque>
+#include <mutex>
 
 class IEventQueue;
 
@@ -41,7 +43,13 @@ public:
     virtual void        deleteTimer(EventQueueTimer*) const;
 
 private:
+    bool                popUserEvent(UInt32& dataID);
+    bool                removeUserEvent(UInt32 dataID);
+    bool                hasUserEvent() const;
+
     EventRef            m_event;
     IEventQueue*        m_eventQueue;
     EventQueueRef        m_carbonEventQueue;
+    mutable std::mutex  m_userEventMutex;
+    std::deque<UInt32>  m_userEvents;
 };
