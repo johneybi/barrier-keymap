@@ -81,9 +81,40 @@ TEST(KeyRemapperTests, tapRuleEmitsAloneKeyOnKeyUp)
 	EXPECT_TRUE(down.empty());
 	ASSERT_EQ(2u, up.size());
 	expectEvent(up[0], KeyRemapper::KeyEvent::kDown, kKeyF19,
-		KeyModifierSuper, kSuperButton);
+		0, kSuperButton);
 	expectEvent(up[1], KeyRemapper::KeyEvent::kUp, kKeyF19,
-		KeyModifierSuper, kSuperButton);
+		0, kSuperButton);
+}
+
+TEST(KeyRemapperTests, rightAltTapSendsPlainF19AndHoldActsAsRightSuper)
+{
+	KeyRemapConfig config;
+	config.addTapRule("mac", kKeyAlt_R, kKeyF19, kKeySuper_R);
+
+	KeyRemapper remapper(config);
+	KeyRemapper::KeyEventList pending =
+		remapper.remapKeyDown("mac", kKeyAlt_R, KeyModifierAlt, kAltButton);
+	KeyRemapper::KeyEventList tap =
+		remapper.remapKeyUp("mac", kKeyAlt_R, KeyModifierAlt, kAltButton);
+
+	EXPECT_TRUE(pending.empty());
+	ASSERT_EQ(2u, tap.size());
+	expectEvent(tap[0], KeyRemapper::KeyEvent::kDown, kKeyF19,
+		0, kAltButton);
+	expectEvent(tap[1], KeyRemapper::KeyEvent::kUp, kKeyF19,
+		0, kAltButton);
+
+	pending = remapper.remapKeyDown(
+		"mac", kKeyAlt_R, KeyModifierAlt, kAltButton);
+	KeyRemapper::KeyEventList chord =
+		remapper.remapKeyDown("mac", 'c', KeyModifierAlt, kCButton);
+
+	EXPECT_TRUE(pending.empty());
+	ASSERT_EQ(2u, chord.size());
+	expectEvent(chord[0], KeyRemapper::KeyEvent::kDown, kKeySuper_R,
+		KeyModifierSuper, kAltButton);
+	expectEvent(chord[1], KeyRemapper::KeyEvent::kDown, 'c',
+		KeyModifierSuper, kCButton);
 }
 
 TEST(KeyRemapperTests, tapRuleFlushesHoldBeforeChordKey)

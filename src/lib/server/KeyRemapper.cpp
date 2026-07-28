@@ -185,8 +185,11 @@ KeyRemapper::remapKeyUp(const std::string& screen, KeyID id,
 				m_pendingTaps.erase(pendingScreen);
 			}
 
-			KeyEvent down(KeyEvent::kDown, tap.m_aloneID, mask, tap.m_button);
-			KeyEvent up(KeyEvent::kUp, tap.m_aloneID, mask, tap.m_button);
+			KeyModifierMask tapMask =
+				mask & ~modifierForKey(tap.m_sourceID);
+			tapMask = translateMask(normalizedScreen, tapMask);
+			KeyEvent down(KeyEvent::kDown, tap.m_aloneID, tapMask, tap.m_button);
+			KeyEvent up(KeyEvent::kUp, tap.m_aloneID, tapMask, tap.m_button);
 			LOG((CLOG_DEBUG1 "key remap tap screen=\"%s\" key=%s->%s button=0x%04x",
 				screen.c_str(), keyName(tap.m_sourceID).c_str(),
 				keyName(tap.m_aloneID).c_str(), tap.m_button));

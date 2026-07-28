@@ -70,9 +70,8 @@ ready for other users.
 1. Run the server with `barrier.conf.example-remaps`.
 2. Confirm normal edge switching still works.
 3. On the `mac` screen, verify:
-   - `right_alt` behaves as `right_super`.
-   - tapping `right_super` sends `F19`.
-   - holding `right_super` and pressing another key keeps the Super modifier.
+   - tapping `right_alt` sends plain `F19`.
+   - holding `right_alt` with another key uses the right Super modifier.
    - `control+space` sends an `F19` tap without leaving Control stuck down.
 4. On the `windows` screen, verify:
    - `left_super` behaves as `left_control`.

@@ -27,9 +27,8 @@ screen:
 ```text
 section: remaps
   mac:
-    right_alt = right_super
-    right_super.alone = F19
-    right_super.hold = right_super
+    right_alt.alone = F19
+    right_alt.hold = right_super
     control+space = F19
 
   windows:
@@ -39,7 +38,7 @@ end
 ```
 
 Supported behavior includes direct key remaps, left/right modifier key names,
-tap-hold rules such as `right_super.alone`, and hotkey-style chord remaps such
+tap-hold rules such as `right_alt.alone`, and hotkey-style chord remaps such
 as `control+space = F19`.
 
 See [server-side key remaps](doc/key-remaps.md) for the supported config subset,
