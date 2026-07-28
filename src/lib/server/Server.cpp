@@ -44,6 +44,7 @@
 #include "base/Log.h"
 #include "base/TMethodEventJob.h"
 
+#include <algorithm>
 #include <cstring>
 #include <cstdlib>
 #include <sstream>
@@ -74,6 +75,7 @@ modifierMaskForLog(KeyModifierMask mask)
 }
 
 const double kKeyRemapTapHoldDelay = 0.20;
+const SInt32 kSecondaryScreenEntryInset = 8;
 
 void
 relayKeyEvents(BaseClientProxy* client, const KeyRemapper::KeyEventList& events)
@@ -825,16 +827,15 @@ void
 Server::avoidJumpZone(BaseClientProxy* dst,
 				EDirection dir, SInt32& x, SInt32& y) const
 {
-	// we only need to avoid jump zones on the primary screen
-	if (dst != m_primaryClient) {
-		return;
-	}
-
     const std::string dstName(getName(dst));
 	SInt32 dx, dy, dw, dh;
 	dst->getShape(dx, dy, dw, dh);
 	float t = mapToFraction(dst, dir, x, y);
-	SInt32 z = getJumpZoneSize(dst);
+	// Secondary screens report relative motion back to the server.  Entering
+	// exactly on their edge lets a small stale opposite delta immediately
+	// switch back, especially after the Windows primary cursor is warped.
+	SInt32 z = (dst == m_primaryClient) ?
+		getJumpZoneSize(dst) : kSecondaryScreenEntryInset;
 
 	// move in far enough to avoid the jump zone.  if entering a side
 	// that doesn't have a neighbor (i.e. an asymmetrical side) then we
@@ -843,25 +844,25 @@ Server::avoidJumpZone(BaseClientProxy* dst,
 	case kLeft:
 		if (!m_config->getNeighbor(dstName, kRight, t, NULL).empty() &&
 			x > dx + dw - 1 - z)
-			x = dx + dw - 1 - z;
+			x = dx + dw - 1 - std::min(z, dw - 1);
 		break;
 
 	case kRight:
 		if (!m_config->getNeighbor(dstName, kLeft, t, NULL).empty() &&
 			x < dx + z)
-			x = dx + z;
+			x = dx + std::min(z, dw - 1);
 		break;
 
 	case kTop:
 		if (!m_config->getNeighbor(dstName, kBottom, t, NULL).empty() &&
 			y > dy + dh - 1 - z)
-			y = dy + dh - 1 - z;
+			y = dy + dh - 1 - std::min(z, dh - 1);
 		break;
 
 	case kBottom:
 		if (!m_config->getNeighbor(dstName, kTop, t, NULL).empty() &&
 			y < dy + z)
-			y = dy + z;
+			y = dy + std::min(z, dh - 1);
 		break;
 
 	case kNoDirection:
