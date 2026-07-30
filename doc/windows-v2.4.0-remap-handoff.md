@@ -94,3 +94,34 @@ if ($LASTEXITCODE -ne 0) { throw "Wrong remap source revision" }
 Stop every older `barriers.exe`, start the binary built from that HEAD, and
 record its executable path, SHA256, and server log before asking the Mac to
 reconnect.
+
+## 2026-07-30 official-client remap test
+
+With the identified v2.4.0-based server build, the official macOS client had
+smooth mouse movement in the first run. A later run had mild stutter and one
+immediate `enter -> leave -> enter` sequence at the same entry coordinate.
+
+The user also reported that tapping Windows Right Alt looked like a Return
+keypress. However, the macOS client recorded no key-down or key-up event during
+that test window. This means the key was not mis-mapped by the official macOS
+client in that run; it was consumed or handled before reaching the client.
+
+For the next test:
+
+1. Keep the pointer active on `ESKui-MacBookPro`.
+2. Enable `DEBUG1` on the Windows server.
+3. Tap the physical Windows Right Alt key exactly once.
+4. Capture the server lines containing `key remap`, the source KeyID, target
+   screen, and generated key.
+5. Confirm that the active configuration contains both Korean-layout sources:
+
+```text
+ESKui-MacBookPro:
+  right_alt.alone = F16
+  right_alt.hold = right_super
+  hangul.alone = F16
+  hangul.hold = right_super
+```
+
+The official Barrier 2.4.0 macOS client maps function keys only through F16.
+F17-F19 must not be used for this baseline.
