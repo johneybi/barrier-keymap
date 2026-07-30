@@ -126,6 +126,39 @@ ESKui-MacBookPro:
 The official Barrier 2.4.0 macOS client maps function keys only through F16.
 F17-F19 must not be used for this baseline.
 
+## 2026-07-30 v141 server Mac result
+
+The Mac connected to the requested v141 server with the official Barrier 2.4.0
+client. Mouse movement was usable but mild stutter remained. At the first
+entry, the client received three immediate `leave -> enter` pairs before the
+screen remained active.
+
+The Right Alt failure is now captured precisely. At `17:14:42`, the Mac client
+received:
+
+```text
+KeyID: 0xEF0D
+button: 0x001C
+macOS virtual key: 0x24
+```
+
+`0xEF0D` is Barrier `Return`, and macOS virtual key `0x24` is Return. The
+expected Barrier F16 KeyID is `0xEFCD`. The macOS client therefore performed
+exactly the event sent by the Windows server; this is not an F16 mapping error
+on the Mac.
+
+Capture the corresponding Windows `DEBUG1` lines:
+
+```text
+onKeyDown screen=... key=... id=... button=...
+key remap pending tap ...
+key remap tap ... ->F16 ...
+onKeyUp screen=... key=... id=... button=...
+```
+
+Do not add a `Return -> F16` rule, because that would break the real Enter key.
+The raw Windows KeyID and remapper output must be identified first.
+
 ## 2026-07-30 Windows official-server A/B result
 
 The Windows side repeated the no-remap test with the official Barrier 2.4.0
