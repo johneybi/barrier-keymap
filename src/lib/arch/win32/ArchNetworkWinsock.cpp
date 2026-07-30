@@ -21,6 +21,7 @@
 #include "arch/win32/XArchWindows.h"
 #include "arch/IArchMultithread.h"
 #include "arch/Arch.h"
+#include "base/Log.h"
 
 #include <malloc.h>
 
@@ -626,7 +627,10 @@ ArchNetworkWinsock::setNoDelayOnSocket(ArchSocket s, bool noDelay)
     int size = sizeof(oflag);
     if (getsockopt_winsock(s->m_socket, IPPROTO_TCP,
                                 TCP_NODELAY, &oflag, &size) == SOCKET_ERROR) {
-        throwError(getsockerror_winsock());
+        const int error = getsockerror_winsock();
+        LOG((CLOG_WARN "TCP_NODELAY pre-set query failed: socket=%p error=%d",
+            s, error));
+        throwError(error);
     }
 
     // set new state
@@ -634,8 +638,25 @@ ArchNetworkWinsock::setNoDelayOnSocket(ArchSocket s, bool noDelay)
     size     = sizeof(flag);
     if (setsockopt_winsock(s->m_socket, IPPROTO_TCP,
                                 TCP_NODELAY, &flag, size) == SOCKET_ERROR) {
-        throwError(getsockerror_winsock());
+        const int error = getsockerror_winsock();
+        LOG((CLOG_WARN "TCP_NODELAY set failed: socket=%p requested=%d error=%d",
+            s, flag != 0, error));
+        throwError(error);
     }
+
+    BOOL verifiedFlag;
+    size = sizeof(verifiedFlag);
+    if (getsockopt_winsock(s->m_socket, IPPROTO_TCP,
+                            TCP_NODELAY, &verifiedFlag, &size) == SOCKET_ERROR) {
+        const int error = getsockerror_winsock();
+        LOG((CLOG_WARN "TCP_NODELAY post-set query failed: socket=%p error=%d",
+            s, error));
+        throwError(error);
+    }
+
+    LOG((CLOG_INFO
+        "TCP_NODELAY verified: socket=%p previous=%d requested=%d actual=%d",
+        s, oflag != 0, flag != 0, verifiedFlag != 0));
 
     return (oflag != 0);
 }

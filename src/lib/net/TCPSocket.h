@@ -88,6 +88,7 @@ protected:
 
 private:
     void                init();
+    void                reportOutputStatsIfDue();
 
     void                sendConnectionFailedEvent(const char*);
     void                onConnected();
@@ -111,4 +112,10 @@ private:
     ArchSocket            m_socket;
     CondVar<bool>        m_flushed;
     SocketMultiplexer*    m_socketMultiplexer;
+    double                m_outputStatsStart;
+    UInt32                m_outputQueueCalls;
+    UInt32                m_outputQueueBytes;
+    UInt32                m_outputWriteCalls;
+    UInt32                m_outputWriteBytes;
+    UInt32                m_outputBufferPeak;
 };

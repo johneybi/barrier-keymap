@@ -176,6 +176,12 @@ TCPSocket::write(const void* buffer, UInt32 n)
         // copy data to the output buffer
         wasEmpty = (m_outputBuffer.getSize() == 0);
         m_outputBuffer.write(buffer, n);
+        ++m_outputQueueCalls;
+        m_outputQueueBytes += n;
+        if (m_outputBuffer.getSize() > m_outputBufferPeak) {
+            m_outputBufferPeak = m_outputBuffer.getSize();
+        }
+        reportOutputStatsIfDue();
 
         // there's data to write
         m_flushed = false;
@@ -308,6 +314,12 @@ TCPSocket::init()
     m_connected = false;
     m_readable  = false;
     m_writable  = false;
+    m_outputStatsStart = ARCH->time();
+    m_outputQueueCalls = 0;
+    m_outputQueueBytes = 0;
+    m_outputWriteCalls = 0;
+    m_outputWriteBytes = 0;
+    m_outputBufferPeak = 0;
 
     try {
         // turn off Nagle algorithm.  we send lots of very short messages
@@ -381,6 +393,11 @@ TCPSocket::doWrite()
     bufferSize = m_outputBuffer.getSize();
     const void* buffer = m_outputBuffer.peek(bufferSize);
     bytesWrote = (UInt32)ARCH->writeSocket(m_socket, buffer, bufferSize);
+    ++m_outputWriteCalls;
+    if (bytesWrote > 0) {
+        m_outputWriteBytes += bytesWrote;
+    }
+    reportOutputStatsIfDue();
 
     if (bytesWrote > 0) {
         discardWrittenData(bytesWrote);
@@ -388,6 +405,35 @@ TCPSocket::doWrite()
     }
 
     return kRetry;
+}
+
+void
+TCPSocket::reportOutputStatsIfDue()
+{
+    const double now = ARCH->time();
+    const double interval = now - m_outputStatsStart;
+    if (interval < 1.0) {
+        return;
+    }
+
+    LOG((CLOG_INFO
+        "tcp output stats: socket=%p interval=%.3fs queued=%u/%uB "
+        "writes=%u/%uB peak=%uB pending=%uB",
+        this,
+        interval,
+        m_outputQueueCalls,
+        m_outputQueueBytes,
+        m_outputWriteCalls,
+        m_outputWriteBytes,
+        m_outputBufferPeak,
+        m_outputBuffer.getSize()));
+
+    m_outputStatsStart = now;
+    m_outputQueueCalls = 0;
+    m_outputQueueBytes = 0;
+    m_outputWriteCalls = 0;
+    m_outputWriteBytes = 0;
+    m_outputBufferPeak = m_outputBuffer.getSize();
 }
 
 void TCPSocket::removeJob()
