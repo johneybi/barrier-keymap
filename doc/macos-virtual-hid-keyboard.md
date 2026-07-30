@@ -668,3 +668,34 @@ back to IOHID, which does not prove the required Karabiner input path. The next
 Mac task is to restart the helper from the current build, capture helper-side
 connection logs, and make the bridge recover from a closed or stale helper
 connection before repeating the F16 test in Karabiner-EventViewer.
+
+### VirtualHID connection recovery
+
+The Mac client now keeps the opt-in VirtualHID output object alive when the
+helper is temporarily unavailable. A failed report send records the exact
+`errno`, reconnects once, and retries the complete keyboard-state report. If
+that retry also fails, the affected key's down/up lifetime remains on IOHID so
+one physical key cannot be split across two output devices. Reconnection is
+attempted again after the fallback input state is fully released.
+
+The live stale-socket reproduction reached:
+
+```text
+VirtualHID helper report send failed on attempt 1:
+Broken pipe (errno=32, offset=0/76)
+reconnected to privileged Karabiner VirtualHID helper
+VirtualHID helper report recovered after reconnect
+```
+
+The helper now logs peer UID/GID, connection IDs, report counts, partial
+reports, EOF, and protocol fields for invalid messages. It exposes its Unix
+socket only while Karabiner reports the Barrier keyboard ready. If the
+Karabiner service connection closes, the helper shuts down the active Barrier
+socket, removes the listener, recreates its Karabiner client, and publishes a
+new listener only after the virtual keyboard is ready again. This prevents a
+live but ineffective helper from silently discarding reports after sleep,
+console-user changes, or Karabiner service restarts.
+
+`KeyboardReport` is fixed at 76 bytes for protocol version 1. A compile-time
+size assertion requires a protocol-version change if its wire layout changes.
+Unit tests cover valid initialization, version mismatch, and key-count bounds.

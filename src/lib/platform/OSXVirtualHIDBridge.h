@@ -42,6 +42,10 @@ struct KeyboardReport {
     uint16_t m_keys[kMaxKeys];
 };
 
+static_assert(
+    sizeof(KeyboardReport) == 76,
+    "VirtualHID helper protocol layout changed; bump kVersion");
+
 inline void
 initialize(KeyboardReport& report)
 {

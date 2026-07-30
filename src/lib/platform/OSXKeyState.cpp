@@ -27,6 +27,7 @@
 #include <IOKit/hidsystem/IOHIDLib.h>
 
 #include <cerrno>
+#include <chrono>
 #include <cstdlib>
 #include <cstring>
 #include <mutex>
@@ -188,6 +189,12 @@ public:
             return false;
         }
 
+        if (m_fallbackActive) {
+            updateFallbackStateLocked(
+                virtualKeyCode, keyDown, isModifier, modifier);
+            return false;
+        }
+
         if (isModifier) {
             if (keyDown) {
                 m_modifiers.insert(modifier);
@@ -201,18 +208,34 @@ public:
                 // Send non-modifier keys as taps so macOS does not auto-repeat
                 // while Barrier waits for the remote key-up packet.
                 m_keys.insert(usage);
-                postReportLocked();
+                const bool posted = postReportLocked();
                 m_keys.erase(usage);
+                if (!posted) {
+                    beginFallbackLocked(virtualKeyCode, isModifier, modifier);
+                    return false;
+                }
+                m_virtualTapKeys.insert(virtualKeyCode);
+                postReportLocked();
+                return true;
             }
             else {
-                if (m_keys.erase(usage) == 0) {
-                    return m_ready;
+                if (m_virtualTapKeys.erase(virtualKeyCode) != 0) {
+                    return true;
                 }
+                return false;
             }
         }
 
-        postReportLocked();
-        return m_ready;
+        const bool posted = postReportLocked();
+        if (!posted && keyDown) {
+            beginFallbackLocked(virtualKeyCode, isModifier, modifier);
+            return false;
+        }
+
+        // A disconnected helper releases its keyboard with an empty report.
+        // Do not emit a mismatched IOHID key-up for a modifier that was
+        // originally pressed through VirtualHID.
+        return posted || !keyDown;
 #else
         (void)virtualKeyCode;
         (void)keyDown;
@@ -236,6 +259,10 @@ public:
         std::lock_guard<std::mutex> lock(m_mutex);
         m_modifiers.clear();
         m_keys.clear();
+        m_virtualTapKeys.clear();
+        m_fallbackKeys.clear();
+        m_fallbackModifiers.clear();
+        m_fallbackActive = false;
         postReportLocked();
 #endif
     }
@@ -251,49 +278,17 @@ private:
     OSXVirtualHIDKeyboardOutput() :
         m_ready(false),
         m_started(false),
-        m_socket(-1)
+        m_socket(-1),
+        m_fallbackActive(false),
+        m_everConnected(false)
     {
     }
 
     bool start()
     {
 #if BARRIER_ENABLE_MAC_VIRTUAL_HID
-        const std::string socketPath =
-            barrier::virtual_hid_bridge::socketPath(getuid());
-        m_socket = socket(AF_UNIX, SOCK_STREAM, 0);
-        if (m_socket < 0) {
-            return false;
-        }
-
-        int noSigPipe = 1;
-        setsockopt(m_socket, SOL_SOCKET, SO_NOSIGPIPE,
-            &noSigPipe, sizeof(noSigPipe));
-
-        sockaddr_un address = {};
-        address.sun_family = AF_UNIX;
-        if (socketPath.size() >= sizeof(address.sun_path)) {
-            close(m_socket);
-            m_socket = -1;
-            return false;
-        }
-        std::strncpy(address.sun_path, socketPath.c_str(),
-            sizeof(address.sun_path) - 1);
-
-        if (connect(m_socket, reinterpret_cast<sockaddr*>(&address),
-                sizeof(address)) != 0) {
-            LOG((CLOG_WARN
-                "BARRIER_MAC_KEY_OUTPUT=virtual-hid requested, but the "
-                "privileged helper at %s is not accessible; using IOHID",
-                socketPath.c_str()));
-            close(m_socket);
-            m_socket = -1;
-            return false;
-        }
-
-        m_ready = true;
         m_started = true;
-        LOG((CLOG_INFO
-            "macOS key output: privileged Karabiner VirtualHID helper"));
+        connectLocked(true);
         return true;
 #else
         LOG((CLOG_WARN
@@ -302,6 +297,79 @@ private:
         return false;
 #endif
     }
+
+#if BARRIER_ENABLE_MAC_VIRTUAL_HID
+    bool connectLocked(bool force)
+    {
+        if (m_socket >= 0) {
+            return true;
+        }
+
+        const std::chrono::steady_clock::time_point now =
+            std::chrono::steady_clock::now();
+        if (!force &&
+            m_lastConnectAttempt.time_since_epoch().count() != 0 &&
+            now - m_lastConnectAttempt < std::chrono::seconds(1)) {
+            return false;
+        }
+        m_lastConnectAttempt = now;
+
+        const std::string socketPath =
+            barrier::virtual_hid_bridge::socketPath(getuid());
+        const int helperSocket = socket(AF_UNIX, SOCK_STREAM, 0);
+        if (helperSocket < 0) {
+            LOG((CLOG_WARN
+                "cannot create VirtualHID helper socket: %s (errno=%d)",
+                std::strerror(errno), errno));
+            return false;
+        }
+
+        int noSigPipe = 1;
+        setsockopt(helperSocket, SOL_SOCKET, SO_NOSIGPIPE,
+            &noSigPipe, sizeof(noSigPipe));
+
+        sockaddr_un address = {};
+        address.sun_family = AF_UNIX;
+        if (socketPath.size() >= sizeof(address.sun_path)) {
+            close(helperSocket);
+            LOG((CLOG_WARN
+                "VirtualHID helper socket path is too long: %s",
+                socketPath.c_str()));
+            return false;
+        }
+        std::strncpy(address.sun_path, socketPath.c_str(),
+            sizeof(address.sun_path) - 1);
+
+        if (connect(helperSocket, reinterpret_cast<sockaddr*>(&address),
+                sizeof(address)) != 0) {
+            const int error = errno;
+            LOG((CLOG_WARN
+                "BARRIER_MAC_KEY_OUTPUT=virtual-hid requested, but the "
+                "privileged helper at %s is not accessible: %s (errno=%d); "
+                "using IOHID",
+                socketPath.c_str(), std::strerror(error), error));
+            close(helperSocket);
+            return false;
+        }
+
+        m_socket = helperSocket;
+        m_ready = true;
+        LOG((CLOG_INFO "%s privileged Karabiner VirtualHID helper at %s",
+            m_everConnected ? "reconnected to" : "macOS key output:",
+            socketPath.c_str()));
+        m_everConnected = true;
+        return true;
+    }
+
+    void disconnectLocked()
+    {
+        if (m_socket >= 0) {
+            close(m_socket);
+            m_socket = -1;
+        }
+        m_ready = false;
+    }
+#endif
 
     void stop()
     {
@@ -315,11 +383,7 @@ private:
             m_modifiers.clear();
             m_keys.clear();
             postReportLocked();
-            if (m_socket >= 0) {
-                close(m_socket);
-                m_socket = -1;
-            }
-            m_ready = false;
+            disconnectLocked();
         }
 
         m_started = false;
@@ -457,10 +521,54 @@ private:
     }
 
 #if BARRIER_ENABLE_MAC_VIRTUAL_HID
-    void postReportLocked()
+    void beginFallbackLocked(
+        UInt8 virtualKeyCode, bool isModifier, Modifier modifier)
     {
-        if (!m_ready || m_socket < 0) {
-            return;
+        m_fallbackActive = true;
+        if (isModifier) {
+            m_modifiers.erase(modifier);
+            m_fallbackModifiers.insert(modifier);
+        }
+        else {
+            m_fallbackKeys.insert(virtualKeyCode);
+        }
+        LOG((CLOG_WARN
+            "using IOHID for virtual key 0x%02x until its input state "
+            "is released",
+            virtualKeyCode));
+    }
+
+    void updateFallbackStateLocked(
+        UInt8 virtualKeyCode, bool keyDown, bool isModifier, Modifier modifier)
+    {
+        if (isModifier) {
+            if (keyDown) {
+                m_fallbackModifiers.insert(modifier);
+            }
+            else {
+                m_fallbackModifiers.erase(modifier);
+            }
+        }
+        else if (keyDown) {
+            m_fallbackKeys.insert(virtualKeyCode);
+        }
+        else {
+            m_fallbackKeys.erase(virtualKeyCode);
+        }
+
+        if (!keyDown && m_fallbackModifiers.empty() &&
+            m_fallbackKeys.empty()) {
+            m_fallbackActive = false;
+            LOG((CLOG_INFO
+                "IOHID fallback input state released; VirtualHID reconnect "
+                "will be attempted on the next key"));
+        }
+    }
+
+    bool postReportLocked()
+    {
+        if (!connectLocked(false)) {
+            return false;
         }
 
         barrier::virtual_hid_bridge::KeyboardReport report;
@@ -478,35 +586,60 @@ private:
 
         const unsigned char* bytes =
             reinterpret_cast<const unsigned char*>(&report);
-        size_t offset = 0;
-        while (offset < sizeof(report)) {
-            const ssize_t count =
-                send(m_socket, bytes + offset, sizeof(report) - offset, 0);
-            if (count > 0) {
-                offset += static_cast<size_t>(count);
+        for (int attempt = 0; attempt < 2; ++attempt) {
+            size_t offset = 0;
+            while (offset < sizeof(report)) {
+                const ssize_t count =
+                    send(m_socket, bytes + offset, sizeof(report) - offset, 0);
+                if (count > 0) {
+                    offset += static_cast<size_t>(count);
+                    continue;
+                }
+                if (count < 0 && errno == EINTR) {
+                    continue;
+                }
+
+                const int error = count == 0 ? ECONNRESET : errno;
+                LOG((CLOG_WARN
+                    "VirtualHID helper report send failed on attempt %d: "
+                    "%s (errno=%d, offset=%zu/%zu)",
+                    attempt + 1, std::strerror(error), error, offset,
+                    sizeof(report)));
+                disconnectLocked();
+                break;
+            }
+
+            if (offset == sizeof(report)) {
+                if (attempt != 0) {
+                    LOG((CLOG_INFO
+                        "VirtualHID helper report recovered after reconnect"));
+                }
+                return true;
+            }
+
+            if (attempt == 0 && connectLocked(true)) {
                 continue;
             }
-            if (count < 0 && errno == EINTR) {
-                continue;
-            }
-            LOG((CLOG_WARN
-                "VirtualHID helper connection failed; using IOHID"));
-            close(m_socket);
-            m_socket = -1;
-            m_ready = false;
             break;
         }
+        return false;
     }
 #else
-    void postReportLocked() {}
+    bool postReportLocked() { return false; }
 #endif
 
     bool m_ready;
     bool m_started;
     int m_socket;
+    bool m_fallbackActive;
+    bool m_everConnected;
+    std::chrono::steady_clock::time_point m_lastConnectAttempt;
     mutable std::mutex m_mutex;
     std::set<Modifier> m_modifiers;
     std::set<UInt16> m_keys;
+    std::set<UInt8> m_virtualTapKeys;
+    std::set<UInt8> m_fallbackKeys;
+    std::set<Modifier> m_fallbackModifiers;
 };
 
 //
