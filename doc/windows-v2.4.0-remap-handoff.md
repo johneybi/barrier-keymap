@@ -133,8 +133,8 @@ client. Mouse movement was usable but mild stutter remained. At the first
 entry, the client received three immediate `leave -> enter` pairs before the
 screen remained active.
 
-The Right Alt failure is now captured precisely. At `17:14:42`, the Mac client
-received:
+No Right Alt test occurred during this run. The event received at `17:14:42`
+was an ordinary Return event:
 
 ```text
 KeyID: 0xEF0D
@@ -142,12 +142,14 @@ button: 0x001C
 macOS virtual key: 0x24
 ```
 
-`0xEF0D` is Barrier `Return`, and macOS virtual key `0x24` is Return. The
-expected Barrier F16 KeyID is `0xEFCD`. The macOS client therefore performed
-exactly the event sent by the Windows server; this is not an F16 mapping error
-on the Mac.
+`0xEF0D` is Barrier `Return`, and macOS virtual key `0x24` is Return. An earlier
+version of this document incorrectly attributed this event to Right Alt based
+on conversational timing. That attribution and the conclusions derived from
+it were invalid.
 
-Capture the corresponding Windows `DEBUG1` lines:
+Right Alt behavior remains untested for this run. Before the next test, record
+an explicit timestamp or marker, keep the pointer on the Mac, press Right Alt
+exactly once, and correlate the corresponding Windows `DEBUG1` lines:
 
 ```text
 onKeyDown screen=... key=... id=... button=...
@@ -156,8 +158,8 @@ key remap tap ... ->F16 ...
 onKeyUp screen=... key=... id=... button=...
 ```
 
-Do not add a `Return -> F16` rule, because that would break the real Enter key.
-The raw Windows KeyID and remapper output must be identified first.
+The raw Windows KeyID and remapper output must be identified before drawing a
+conclusion about the Right Alt rule.
 
 ## 2026-07-30 Windows official-server A/B result
 
