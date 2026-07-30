@@ -595,3 +595,28 @@ The remaining client currently reaches `192.168.0.10:24800` as a single
 `SYN_SENT` connection, but the TCP attempt times out after 15 seconds. The
 Windows server should be restarted after its duplicate-client disconnect
 crash; the Mac client will continue retrying automatically.
+
+## 2026-07-31 single-client v141 retest
+
+After the duplicate clients were removed, one Mac client connected to the
+Windows v141 server and completed the Barrier 1.6 handshake. The connection
+remained established, but mouse movement was again severely stuttered.
+
+An explicitly coordinated Right Alt tap was performed while the pointer was
+intended to be on the Mac screen. The Mac received no key-down or key-up
+message. At the test timestamp it received only:
+
+```text
+[2026-07-31T00:52:28] DEBUG1: recv leave
+[2026-07-31T00:52:28] INFO: leaving screen
+```
+
+The client then received another `enter` at `00:52:31` and another `leave` at
+`00:52:33`. This identifies the visible reaction as a Barrier screen leave,
+not Return, F16, or another macOS key. Right Alt remapping cannot be evaluated
+while the server repeatedly changes the active screen and sends no key event.
+
+The privileged VirtualHID helper also accepted and then lost the Barrier Unix
+socket connection during this run. That is a separate Mac keyboard-output
+issue, but it cannot explain the missing server key packet or the repeated
+screen enter/leave events.
