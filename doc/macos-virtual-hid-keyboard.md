@@ -558,3 +558,28 @@ only the Barrier input device.
 4. Confirm Karabiner output keyboard remains a separate device.
 5. Only after this proof should Barrier code be changed to depend on
    VirtualHIDKeyboard output.
+
+## 2026-07-31 coordinated connection result
+
+Windows ran the v141 remap server with SSL disabled and the requested F16
+rules. After the handshake keep-alive fix, one Mac connection reached:
+
+```text
+client "ESKui-MacBookPro" has connected
+```
+
+However, additional TCP connections using the same client name arrived before
+the first connection closed. The server reported:
+
+```text
+a client with name "ESKui-MacBookPro" is already connected
+```
+
+and two Mac TCP sessions were simultaneously established. This prevents a
+valid key test and triggers a Windows v141 disconnect-path crash.
+
+Before reconnecting, stop every user-session `barrierc` process and any wrapper
+that automatically starts another copy. Keep the privileged VirtualHID helper
+running, then start exactly one `barrierc` process from commit `6867d3dc` or
+later. Verify locally that only one client process exists before allowing it to
+connect to `192.168.0.10:24800`.
