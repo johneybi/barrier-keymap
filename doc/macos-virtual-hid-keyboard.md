@@ -620,3 +620,26 @@ The privileged VirtualHID helper also accepted and then lost the Barrier Unix
 socket connection during this run. That is a separate Mac keyboard-output
 issue, but it cannot explain the missing server key packet or the repeated
 screen enter/leave events.
+
+### Karabiner EventViewer capture
+
+A later isolated Right Alt test was captured in Karabiner-EventViewer. The
+visible output sequence was:
+
+```text
+right_option down
+right_option + return_or_enter down
+return_or_enter up
+right_option up
+```
+
+EventViewer attributed these post-modification events to
+`Karabiner DriverKit VirtualHIDKeyboard 1.8.0`. The active Karabiner profile
+contains a Korean-input rule described as `오른쪽 option 키를 사용하여 한글을
+한자로 변환`, which maps `right_option` to `right_option + return_or_enter`.
+
+This explains both user-visible results: Return can look like a newline when
+there is no convertible Korean text, while Korean text produces the attached
+Hanja candidate popover. The intended F16 event was not observed. The Windows
+side must verify that the active server config loaded the `right_alt` and
+`hangul` tap rules and logged the tap output as F16 before another Mac key test.
