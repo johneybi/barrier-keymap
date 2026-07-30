@@ -43,7 +43,7 @@ their input, and emitting the result through its own virtual keyboard. Direct
 Barrier `IOHIDPostEvent` output is therefore a poor target for Karabiner device
 rules.
 
-## Why VirtualHIDKeyboard is the right boundary
+## Why a separate input VirtualHIDKeyboard is the right boundary
 
 The desired architecture is:
 
@@ -115,8 +115,17 @@ Implications:
 - The DriverKit keyboard device description applies those values as
   `kIOHIDVendorIDKey`, `kIOHIDProductIDKey`, and `kIOHIDCountryCodeKey`.
 
-This is the lowest-risk implementation path. It supports a custom
-vendor/product identity without Barrier shipping its own DriverKit extension.
+This path is useful as a reliable macOS HID output and as a transport prototype,
+but it is not a Karabiner input path. Karabiner identifies every device whose
+manufacturer is `pqrs.org` and whose product starts with
+`Karabiner DriverKit VirtualHIDKeyboard` as its own virtual device. That test
+does not use the configured vendor/product IDs. Karabiner observes such devices
+for Caps Lock LED state, never seizes them, and does not place their ordinary
+key events in the manipulation queue.
+
+The current helper therefore proves that Barrier can deliver complete keyboard
+reports through a privileged process, but its DriverKit backend must be replaced
+before Karabiner rules can transform those reports.
 
 ### Option B: Build a Barrier-owned virtual HID device
 
@@ -130,8 +139,11 @@ Implications:
 - Much higher maintenance and distribution burden.
 - Gives full control over device identity.
 
-This is only worth considering if Karabiner's existing virtual HID daemon cannot
-expose a separate Barrier input keyboard identity.
+The existing Karabiner virtual HID daemon cannot expose a separate input
+keyboard identity: the driver fixes the manufacturer and product strings used
+by Karabiner's own-device check. A Barrier-owned input device, or another
+independent virtual-input implementation, is therefore required for the
+Karabiner integration goal.
 
 ## Device identity strategy
 
@@ -180,17 +192,18 @@ Karabiner rules should:
 - use `device_if` for Barrier input rules
 - use `device_unless` or device-level settings to exclude Karabiner output
 
-If Barrier uses Karabiner's same virtual keyboard as output, a loop is likely:
+Karabiner prevents a loop from its own output keyboard by classifying it as a
+virtual device and excluding its ordinary events from manipulation:
 
 ```text
-Barrier sends virtual key
--> Karabiner modifies it
--> Karabiner emits virtual key
--> Karabiner sees its own output again
+Barrier sends report to Karabiner's output virtual keyboard
+-> macOS applications receive it
+-> Karabiner observes the device but does not manipulate the key
 ```
 
-So the critical implementation requirement is a separate input device identity,
-not merely "send through Karabiner's existing output keyboard."
+So the critical implementation requirement is a genuinely separate input
+device implementation, not merely different vendor/product parameters on
+Karabiner's existing output keyboard.
 
 ## Implementation sketch
 
@@ -699,3 +712,30 @@ console-user changes, or Karabiner service restarts.
 `KeyboardReport` is fixed at 76 bytes for protocol version 1. A compile-time
 size assertion requires a protocol-version change if its wire layout changes.
 Unit tests cover valid initialization, version mismatch, and key-count bounds.
+
+The first run with the current helper identified the original immediate
+disconnect: on macOS, the accepted Unix socket retained `O_NONBLOCK` from the
+listener. The helper processed the F16 press and release as two complete
+reports, then treated the next `recv` result, `EAGAIN` (`errno=35`), as a
+disconnect. Each accepted client socket is now explicitly changed back to
+blocking mode before reading reports. The listener remains non-blocking so the
+helper can continue monitoring shutdown and Karabiner reconnect state.
+
+### Confirmed Karabiner output-device limitation
+
+Karabiner-Elements v16.1.8 source at commit
+`f936a32f838de6af29ebaa0a05420842d9d950e9` confirms the live `observed`
+result:
+
+- `src/share/iokit_utility.hpp` classifies the `pqrs.org` DriverKit keyboard as
+  a Karabiner virtual device by manufacturer and product-name prefix.
+- `device_grabber_details/entry.hpp` makes virtual devices observable but
+  explicitly returns false from `needs_to_seize_device`.
+- `device_grabber.hpp` handles only Caps Lock state from virtual-device input;
+  ordinary input reaches the manipulation queue only in the non-virtual branch.
+
+Changing the helper's vendor/product parameters cannot change this behavior.
+The next macOS proof must replace only the helper's report-output backend with
+an independent virtual input keyboard. The Barrier protocol, keyboard-state
+report, reconnect logic, peer checks, IOHID fallback, and Windows F16 remap can
+all remain in place.

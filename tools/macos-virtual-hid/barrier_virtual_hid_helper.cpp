@@ -285,6 +285,16 @@ int main(int argc, char* argv[]) {
         break;
       }
 
+      const int connection_flags = fcntl(connection, F_GETFL, 0);
+      if (connection_flags < 0 ||
+          fcntl(connection, F_SETFL, connection_flags & ~O_NONBLOCK) != 0) {
+        std::cerr << "cannot make helper client socket blocking: "
+                  << std::strerror(errno) << " (errno=" << errno << ")"
+                  << std::endl;
+        close(connection);
+        continue;
+      }
+
       uid_t peer_uid = 0;
       gid_t peer_gid = 0;
       if (getpeereid(connection, &peer_uid, &peer_gid) != 0 ||
