@@ -52,3 +52,39 @@ working Barrier v2.4.0 comparison whenever possible.
 The first failure determines the scope: a failure before remaps are enabled is
 a build or baseline mismatch; a failure only after remaps are enabled belongs
 to the server remapper path.
+
+## 2026-07-30 Mac baseline attempt
+
+This attempt is not a valid result for the new branch because the running
+Windows server binary was not identified before testing.
+
+The Mac used the official Barrier 2.4.0 DMG client:
+
+```text
+SHA256 53369a4579223e0f8742b897d96b6a9a6c3abc9f6ef9c4fec2779b0ef7bd5715
+client ESKui-MacBookPro
+server 192.168.0.10:24800
+crypto disabled
+```
+
+The client connected and received one screen entry at `0,0`. Mouse button and
+keyboard events arrived, but there was no usable pointer movement. The client
+was stopped and the macOS cursor was restored.
+
+Before another test, verify the exact Windows process:
+
+```powershell
+git branch --show-current
+git rev-parse HEAD
+Get-CimInstance Win32_Process -Filter "Name='barriers.exe'" |
+    Select-Object ProcessId, ExecutablePath, CommandLine
+Get-FileHash <the-running-barriers.exe> -Algorithm SHA256
+```
+
+Expected branch: `stable/v2.4.0-server-remap`.
+
+Expected source HEAD at the time of this note: `69ee31ba`.
+
+Stop every older `barriers.exe`, start the binary built from that HEAD, and
+record its executable path, SHA256, and server log before asking the Mac to
+reconnect.
