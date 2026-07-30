@@ -106,6 +106,7 @@ private:
     void                fileChunkReceived();
     void                dragInfoReceived();
     void                handleClipboardSendingEvent(const Event&, void*);
+    void                logProtocolHealth();
 
 private:
     typedef EResult (ServerProxy::*MessageParser)(const UInt8*);
@@ -128,6 +129,17 @@ private:
     double                m_keepAliveAlarm;
     EventQueueTimer*    m_keepAliveAlarmTimer;
     bool                m_handshakeComplete;
+
+    Stopwatch            m_protocolHealthTimer;
+    UInt32                m_diagEnterCount;
+    UInt32                m_diagLeaveCount;
+    UInt32                m_diagKeyCount;
+    UInt32                m_diagMouseMoveCount;
+    UInt32                m_diagMouseMoveForwardedCount;
+    UInt32                m_diagMouseMoveCompressedCount;
+    UInt32                m_diagMouseRelMoveCount;
+    SInt32                m_diagLastMouseX;
+    SInt32                m_diagLastMouseY;
 
     MessageParser        m_parser;
     IEventQueue*        m_events;
