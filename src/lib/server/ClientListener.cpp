@@ -157,7 +157,7 @@ ClientListener::handleClientAccepted(const Event&, void* vsocket)
     assert(m_server != NULL);
 
     // create proxy for unknown client
-    ClientProxyUnknown* client = new ClientProxyUnknown(stream, 30.0, m_server, m_events);
+    ClientProxyUnknown* client = new ClientProxyUnknown(stream, 90.0, m_server, m_events);
 
     m_newClients.insert(client);
 
