@@ -735,7 +735,42 @@ result:
   ordinary input reaches the manipulation queue only in the non-virtual branch.
 
 Changing the helper's vendor/product parameters cannot change this behavior.
-The next macOS proof must replace only the helper's report-output backend with
-an independent virtual input keyboard. The Barrier protocol, keyboard-state
-report, reconnect logic, peer checks, IOHID fallback, and Windows F16 remap can
-all remain in place.
+The next macOS implementation must replace only the helper's report-output
+backend with an independent virtual input keyboard. The Barrier protocol,
+keyboard-state report, reconnect logic, peer checks, IOHID fallback, and
+Windows function-key remap can all remain in place.
+
+### IOHIDUserDevice feasibility result
+
+`tools/macos-virtual-hid/barrier_iohid_user_device_probe.cpp` is a minimal
+independent keyboard proof. It uses manufacturer `Barrier Keymap`, product
+`Barrier Input Virtual Keyboard`, identity `0x1209:0x4b42`, and sends F19.
+
+The local SDK and execution test confirm that `IOHIDUserDevice` is not an
+unsigned local-development shortcut:
+
+- the API requires `com.apple.developer.hid.virtual.device`;
+- the unsigned probe builds but device creation returns null;
+- adding that entitlement with an ad-hoc signature causes macOS to terminate
+  the process because the entitlement is not provisioned;
+- administrator privileges do not replace code-signing entitlement validation.
+
+Build the probe with:
+
+```sh
+tools/macos-virtual-hid/build_iohid_user_device_probe.sh
+```
+
+`BARRIER_SIGN_IDENTITY` may be set only when the selected Apple signing identity
+and provisioning profile are authorized for the virtual-device entitlement.
+
+This leaves two honest product paths:
+
+1. Ship a Barrier-owned DriverKit virtual input keyboard. This preserves the
+   full Karabiner integration goal, but requires Apple entitlement approval,
+   signing, system-extension installation, notarization, and release packaging.
+2. Keep the current Karabiner DriverKit backend as optional direct macOS HID
+   output and implement the required mappings in Barrier. This is easier to
+   distribute, but those events do not pass through Karabiner manipulators.
+
+The transport and recovery work completed so far applies to both paths.
