@@ -264,15 +264,25 @@ option:
 ```sh
 cmake -S . -B /tmp/barrier-keymap-vhid-build \
   -DBARRIER_ENABLE_MAC_VIRTUAL_HID=ON \
-  -DKARABINER_VHID_REPO=/tmp/Karabiner-DriverKit-VirtualHIDDevice \
   -DBARRIER_BUILD_GUI=OFF \
   -DCMAKE_POLICY_VERSION_MINIMUM=3.5
 cmake --build /tmp/barrier-keymap-vhid-build --target barrierc
 ```
 
-At runtime, the existing IOHID path remains the default. To route supported
-remote key output through the Barrier input VirtualHID keyboard, run the macOS
-client with:
+Build and start the privileged helper for the logged-in user:
+
+```sh
+tools/macos-virtual-hid/build_helper.sh
+sudo /tmp/barrier_virtual_hid_helper --uid "$(id -u)"
+```
+
+The helper creates `/var/run/barrier-keymap-vhid-<uid>.sock`, assigns it to the
+requested user with mode `0600`, and verifies the peer UID for every accepted
+connection. It waits for Karabiner VirtualHID to become ready before exposing
+the socket.
+
+At runtime, the existing IOHID path remains the default. Start `barrierc` as
+the normal logged-in user, not with `sudo`:
 
 ```sh
 BARRIER_MAC_KEY_OUTPUT=virtual-hid \
@@ -281,8 +291,9 @@ BARRIER_MAC_KEY_OUTPUT=virtual-hid \
 
 The current implementation:
 
-- initializes a Karabiner VirtualHID keyboard with `vendor_id=0x1209` and
-  `product_id=0x4b42`
+- sends complete keyboard reports to the privileged helper
+- the helper initializes a Karabiner VirtualHID keyboard with
+  `vendor_id=0x1209` and `product_id=0x4b42`
 - keeps a pressed modifier set and pressed key set
 - posts complete `keyboard_input` reports after each key transition
 - falls back to the original `IOHIDPostEvent` path if VirtualHID is not ready
@@ -292,7 +303,8 @@ The current implementation:
 
 Current limitations:
 
-- the client must be able to access Karabiner's root-only VirtualHID socket
+- the helper is an experimental command-line process, not an installed
+  launchd service yet
 - right modifiers still collapse to left modifiers because the current macOS
   key map maps both sides to the same Carbon virtual key before output
 - media keys still use the existing separate `fakeMediaKey` path

@@ -19,23 +19,22 @@
 #include "platform/OSXKeyState.h"
 #include "platform/OSXUchrKeyResource.h"
 #include "platform/OSXMediaKeySupport.h"
+#include "platform/OSXVirtualHIDBridge.h"
 #include "arch/Arch.h"
 #include "base/Log.h"
 
 #include <Carbon/Carbon.h>
 #include <IOKit/hidsystem/IOHIDLib.h>
 
+#include <cerrno>
 #include <cstdlib>
+#include <cstring>
 #include <mutex>
 #include <set>
 #include <string>
+#include <sys/socket.h>
+#include <sys/un.h>
 #include <unistd.h>
-
-#if BARRIER_ENABLE_MAC_VIRTUAL_HID
-#include <filesystem>
-#include <pqrs/karabiner/driverkit/virtual_hid_device_driver.hpp>
-#include <pqrs/karabiner/driverkit/virtual_hid_device_service.hpp>
-#endif
 
 // Note that some virtual keys codes appear more than once.  The
 // first instance of a virtual key code maps to the KeyID that we
@@ -242,101 +241,59 @@ public:
     }
 
 private:
-#if BARRIER_ENABLE_MAC_VIRTUAL_HID
-    typedef pqrs::karabiner::driverkit::virtual_hid_device_driver::
-        hid_report::modifier Modifier;
-    typedef pqrs::karabiner::driverkit::virtual_hid_device_driver::
-        hid_report::keyboard_input KeyboardInput;
-    typedef pqrs::karabiner::driverkit::virtual_hid_device_service::client
-        Client;
-#else
     enum class Modifier {
-        left_control,
-        left_shift,
-        left_option,
-        left_command,
+        left_control = barrier::virtual_hid_bridge::kLeftControl,
+        left_shift = barrier::virtual_hid_bridge::kLeftShift,
+        left_option = barrier::virtual_hid_bridge::kLeftOption,
+        left_command = barrier::virtual_hid_bridge::kLeftCommand,
     };
-#endif
 
     OSXVirtualHIDKeyboardOutput() :
         m_ready(false),
-        m_started(false)
+        m_started(false),
+        m_socket(-1)
     {
     }
 
     bool start()
     {
 #if BARRIER_ENABLE_MAC_VIRTUAL_HID
-        const std::filesystem::path socket =
-            pqrs::karabiner::driverkit::virtual_hid_device_service::
-                constants::get_server_socket_file_path();
-        const std::string socketPath = socket.string();
-
-        if (access(socketPath.c_str(), R_OK) != 0) {
-            LOG((CLOG_WARN
-                "BARRIER_MAC_KEY_OUTPUT=virtual-hid requested, but the "
-                "Karabiner VirtualHID root-only socket at %s is not "
-                "accessible; "
-                "run the macOS client with suitable privileges or use IOHID",
-                socketPath.c_str()));
+        const std::string socketPath =
+            barrier::virtual_hid_bridge::socketPath(getuid());
+        m_socket = socket(AF_UNIX, SOCK_STREAM, 0);
+        if (m_socket < 0) {
             return false;
         }
 
-        pqrs::dispatcher::extra::initialize_shared_dispatcher();
+        int noSigPipe = 1;
+        setsockopt(m_socket, SOL_SOCKET, SO_NOSIGPIPE,
+            &noSigPipe, sizeof(noSigPipe));
 
-        m_client.reset(new Client());
+        sockaddr_un address = {};
+        address.sun_family = AF_UNIX;
+        if (socketPath.size() >= sizeof(address.sun_path)) {
+            close(m_socket);
+            m_socket = -1;
+            return false;
+        }
+        std::strncpy(address.sun_path, socketPath.c_str(),
+            sizeof(address.sun_path) - 1);
 
-        m_client->warning_reported.connect([](auto&& message) {
-            LOG((CLOG_WARN "VirtualHID warning: %s", message.c_str()));
-        });
+        if (connect(m_socket, reinterpret_cast<sockaddr*>(&address),
+                sizeof(address)) != 0) {
+            LOG((CLOG_WARN
+                "BARRIER_MAC_KEY_OUTPUT=virtual-hid requested, but the "
+                "privileged helper at %s is not accessible; using IOHID",
+                socketPath.c_str()));
+            close(m_socket);
+            m_socket = -1;
+            return false;
+        }
 
-        m_client->connect_failed.connect([](auto&& errorCode) {
-            LOG((CLOG_WARN "VirtualHID connect_failed: %s",
-                errorCode.message().c_str()));
-        });
-
-        m_client->closed.connect([this] {
-            std::lock_guard<std::mutex> lock(m_mutex);
-            m_ready = false;
-            LOG((CLOG_WARN "VirtualHID connection closed"));
-        });
-
-        m_client->error_occurred.connect([](auto&& errorCode) {
-            LOG((CLOG_WARN "VirtualHID error_occurred: %s",
-                errorCode.message().c_str()));
-        });
-
-        m_client->connected.connect([this] {
-            LOG((CLOG_INFO
-                "initializing Barrier input VirtualHID keyboard "
-                "vendor_id=0x1209 product_id=0x4b42"));
-
-            pqrs::karabiner::driverkit::virtual_hid_device_service::
-                virtual_hid_keyboard_parameters parameters;
-            parameters.set_vendor_id(pqrs::hid::vendor_id::value_t(0x1209));
-            parameters.set_product_id(pqrs::hid::product_id::value_t(0x4b42));
-            parameters.set_country_code(pqrs::hid::country_code::us);
-
-            m_client->async_virtual_hid_keyboard_initialize(parameters);
-        });
-
-        m_client->virtual_hid_keyboard_ready.connect([this](auto&& ready) {
-            std::lock_guard<std::mutex> lock(m_mutex);
-            if (m_ready == ready) {
-                return;
-            }
-
-            m_ready = ready;
-            LOG((CLOG_INFO "Barrier input VirtualHID keyboard ready=%s",
-                ready ? "true" : "false"));
-            if (m_ready) {
-                postReportLocked();
-            }
-        });
-
-        m_client->async_start();
+        m_ready = true;
         m_started = true;
-        LOG((CLOG_INFO "macOS key output: Karabiner VirtualHID keyboard"));
+        LOG((CLOG_INFO
+            "macOS key output: privileged Karabiner VirtualHID helper"));
         return true;
 #else
         LOG((CLOG_WARN
@@ -358,15 +315,13 @@ private:
             m_modifiers.clear();
             m_keys.clear();
             postReportLocked();
-
-            if (m_client) {
-                m_client->async_virtual_hid_keyboard_terminate();
-                m_client = nullptr;
+            if (m_socket >= 0) {
+                close(m_socket);
+                m_socket = -1;
             }
             m_ready = false;
         }
 
-        pqrs::dispatcher::extra::terminate_shared_dispatcher();
         m_started = false;
 #endif
     }
@@ -504,30 +459,51 @@ private:
 #if BARRIER_ENABLE_MAC_VIRTUAL_HID
     void postReportLocked()
     {
-        if (!m_ready || !m_client) {
+        if (!m_ready || m_socket < 0) {
             return;
         }
 
-        KeyboardInput report;
+        barrier::virtual_hid_bridge::KeyboardReport report;
+        barrier::virtual_hid_bridge::initialize(report);
         for (std::set<Modifier>::const_iterator i = m_modifiers.begin();
             i != m_modifiers.end(); ++i) {
-            report.modifiers.insert(*i);
+            report.m_modifiers |= static_cast<uint8_t>(*i);
         }
         for (std::set<UInt16>::const_iterator i = m_keys.begin();
-            i != m_keys.end(); ++i) {
-            report.keys.insert(*i);
+            i != m_keys.end() &&
+                report.m_keyCount < barrier::virtual_hid_bridge::kMaxKeys;
+            ++i) {
+            report.m_keys[report.m_keyCount++] = *i;
         }
 
-        m_client->async_post_report(report);
+        const unsigned char* bytes =
+            reinterpret_cast<const unsigned char*>(&report);
+        size_t offset = 0;
+        while (offset < sizeof(report)) {
+            const ssize_t count =
+                send(m_socket, bytes + offset, sizeof(report) - offset, 0);
+            if (count > 0) {
+                offset += static_cast<size_t>(count);
+                continue;
+            }
+            if (count < 0 && errno == EINTR) {
+                continue;
+            }
+            LOG((CLOG_WARN
+                "VirtualHID helper connection failed; using IOHID"));
+            close(m_socket);
+            m_socket = -1;
+            m_ready = false;
+            break;
+        }
     }
-
-    std::unique_ptr<Client> m_client;
 #else
     void postReportLocked() {}
 #endif
 
     bool m_ready;
     bool m_started;
+    int m_socket;
     mutable std::mutex m_mutex;
     std::set<Modifier> m_modifiers;
     std::set<UInt16> m_keys;
