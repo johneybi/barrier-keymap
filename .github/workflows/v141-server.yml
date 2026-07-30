@@ -56,7 +56,10 @@ jobs:
         run: |
           $exe = "build-v141\bin\Release\barriers.exe"
           Get-FileHash $exe -Algorithm SHA256
-          & dumpbin /headers $exe | Select-String "machine|linker version|subsystem"
+          Get-Item $exe | Select-Object FullName, Length, @{
+            Name = "FileVersion"
+            Expression = { $_.VersionInfo.FileVersion }
+          }
 
       - name: Assemble server test bundle
         shell: pwsh
