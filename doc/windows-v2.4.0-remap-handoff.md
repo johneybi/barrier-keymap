@@ -267,3 +267,37 @@ mouse regression. It does not remove or defer this requirement from the
 definition of a usable release. After the Windows no-remap baseline passes,
 the virtual HID-to-Karabiner path must be restored and validated separately
 without mixing cursor or networking changes into that test.
+
+## 2026-07-31 client burst-delivery measurement
+
+The single Mac client at commit `1d652e67` measured the live v141 server with
+INFO-level diagnostics and an 8 ms maximum mouse-compression delay. During
+continuous movement, the client received between 188 and 806 absolute mouse
+messages per second, but forwarded only 2 to 4 pointer updates per second.
+Almost every received message was compressed.
+
+Representative samples:
+
+```text
+mouse=334 forwarded=4 compressed=334
+mouse=666 forwarded=3 compressed=666
+mouse=806 forwarded=3 compressed=806
+mouse=750 forwarded=3 compressed=750
+```
+
+No input batch exceeded 50 ms, so the Mac drained each available batch
+quickly. The 8 ms client latency bound cannot help when hundreds of messages
+arrive in only 2 to 4 large bursts per second and no newer data is available
+between bursts. Keyboard input shares the same TCP stream and was also visibly
+delayed.
+
+This moves the active investigation to Windows output delivery rather than
+Mac event processing. The Windows build should:
+
+1. Verify `TCP_NODELAY` with `getsockopt` immediately after `setsockopt` on the
+   accepted client socket and log both the value and any Winsock error.
+2. Count socket writes, output flushes, messages, and bytes per second.
+3. Compare packet timestamps for the same movement using the official server
+   and the custom v141 server.
+4. Run an INFO-level test to exclude thousands of discarded-motion log writes
+   from the timing path.
