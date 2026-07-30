@@ -301,3 +301,33 @@ Mac event processing. The Windows build should:
    and the custom v141 server.
 4. Run an INFO-level test to exclude thousands of discarded-motion log writes
    from the timing path.
+
+## 2026-07-31 valid remote Right Alt result
+
+The test was repeated after confirming that the physical keyboard was attached
+to the Windows server and the pointer was on the Mac screen. At `01:13:16`, the
+Mac client received exactly one F16 press and release:
+
+```text
+recv key down id=0x0000efcd, mask=0x0000, button=0x0138
+recv key up id=0x0000efcd, mask=0x0000, button=0x0138
+```
+
+The Mac key map translated this to macOS virtual key `0x6a`, which is F16.
+This closes the Windows-side Right Alt/Hangul remap question: the active server
+configuration converted the physical Windows Right Alt input to F16 and
+delivered it correctly over the Barrier protocol.
+
+Do not change the working remap rule for the next test. The remaining keyboard
+failure is on the Mac output side. Immediately before posting F16, the Mac
+client's privileged VirtualHID socket had closed, so the client logged:
+
+```text
+VirtualHID helper connection failed; using IOHID
+```
+
+The Mac side will repair and retest the helper connection. Windows should keep
+the known working remap configuration and concentrate only on preserving the
+usable mouse-delivery baseline. A Windows DEBUG1 capture of the same tap is
+useful corroboration, but it is no longer required to identify the failing
+stage.

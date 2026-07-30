@@ -641,3 +641,30 @@ provides no evidence about Windows Right Alt, Barrier remapping, F16 output, or
 the VirtualHID bridge. Discard all remote-key conclusions from this capture.
 Repeat the test only after verifying that the physical keyboard is attached to
 Windows and that the Mac has no directly connected test keyboard.
+
+### Valid remote Right Alt capture
+
+The isolated test was repeated with the physical keyboard confirmed on the
+Windows server. At `01:13:16`, the Mac client received:
+
+```text
+recv key down id=0x0000efcd, mask=0x0000, button=0x0138
+recv key up id=0x0000efcd, mask=0x0000, button=0x0138
+```
+
+`0xEFCD` is Barrier F16. The macOS key map then produced virtual key `0x6a`,
+also F16. This proves the Windows Right Alt/Hangul remap and Barrier protocol
+delivery are working for this rule.
+
+The client failed at the next boundary:
+
+```text
+VirtualHID helper connection failed; using IOHID
+```
+
+The privileged helper process was still present, but its Unix socket peer had
+closed before the first keyboard report was sent. The client therefore fell
+back to IOHID, which does not prove the required Karabiner input path. The next
+Mac task is to restart the helper from the current build, capture helper-side
+connection logs, and make the bridge recover from a closed or stale helper
+connection before repeating the F16 test in Karabiner-EventViewer.
