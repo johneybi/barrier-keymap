@@ -83,7 +83,13 @@ Get-FileHash <the-running-barriers.exe> -Algorithm SHA256
 
 Expected branch: `stable/v2.4.0-server-remap`.
 
-Expected source HEAD at the time of this note: `69ee31ba`.
+The branch must contain remap source commit `69ee31ba`. Documentation commits
+may move HEAD forward, so verify ancestry with:
+
+```powershell
+git merge-base --is-ancestor 69ee31ba HEAD
+if ($LASTEXITCODE -ne 0) { throw "Wrong remap source revision" }
+```
 
 Stop every older `barriers.exe`, start the binary built from that HEAD, and
 record its executable path, SHA256, and server log before asking the Mac to
