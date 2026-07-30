@@ -267,3 +267,66 @@ mouse regression. It does not remove or defer this requirement from the
 definition of a usable release. After the Windows no-remap baseline passes,
 the virtual HID-to-Karabiner path must be restored and validated separately
 without mixing cursor or networking changes into that test.
+## 2026-07-31 client burst-delivery measurement
+
+The single Mac client at commit `1d652e67` measured the live v141 server with
+INFO-level diagnostics and an 8 ms maximum mouse-compression delay. During
+continuous movement, the client received between 188 and 806 absolute mouse
+messages per second, but forwarded only 2 to 4 pointer updates per second.
+Almost every received message was compressed.
+
+Representative samples:
+
+```text
+mouse=334 forwarded=4 compressed=334
+mouse=666 forwarded=3 compressed=666
+mouse=806 forwarded=3 compressed=806
+mouse=750 forwarded=3 compressed=750
+```
+
+No input batch exceeded 50 ms, so the Mac drained each available batch
+quickly. The 8 ms client latency bound cannot help when hundreds of messages
+arrive in only 2 to 4 large bursts per second and no newer data is available
+between bursts. Keyboard input shares the same TCP stream and was also visibly
+delayed.
+
+This moves the active investigation to Windows output delivery rather than
+Mac event processing. The Windows build should:
+
+1. Verify `TCP_NODELAY` with `getsockopt` immediately after `setsockopt` on the
+   accepted client socket and log both the value and any Winsock error.
+2. Count socket writes, output flushes, messages, and bytes per second.
+3. Compare packet timestamps for the same movement using the official server
+   and the custom v141 server.
+4. Run an INFO-level test to exclude thousands of discarded-motion log writes
+   from the timing path.
+
+## 2026-07-31 valid remote Right Alt result
+
+The test was repeated after confirming that the physical keyboard was attached
+to the Windows server and the pointer was on the Mac screen. At `01:13:16`, the
+Mac client received exactly one F16 press and release:
+
+```text
+recv key down id=0x0000efcd, mask=0x0000, button=0x0138
+recv key up id=0x0000efcd, mask=0x0000, button=0x0138
+```
+
+The Mac key map translated this to macOS virtual key `0x6a`, which is F16.
+This closes the Windows-side Right Alt/Hangul remap question: the active server
+configuration converted the physical Windows Right Alt input to F16 and
+delivered it correctly over the Barrier protocol.
+
+Do not change the working remap rule for the next test. The remaining keyboard
+failure is on the Mac output side. Immediately before posting F16, the Mac
+client's privileged VirtualHID socket had closed, so the client logged:
+
+```text
+VirtualHID helper connection failed; using IOHID
+```
+
+The Mac side will repair and retest the helper connection. Windows should keep
+the known working remap configuration and concentrate only on preserving the
+usable mouse-delivery baseline. A Windows DEBUG1 capture of the same tap is
+useful corroboration, but it is no longer required to identify the failing
+stage.
