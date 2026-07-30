@@ -94,7 +94,7 @@ ServerProxy::resetKeepAliveAlarm()
         m_events->deleteTimer(m_keepAliveAlarmTimer);
         m_keepAliveAlarmTimer = NULL;
     }
-    if (m_keepAliveAlarm > 0.0) {
+    if (m_handshakeComplete && m_keepAliveAlarm > 0.0) {
         m_keepAliveAlarmTimer =
             m_events->newOneShotTimer(m_keepAliveAlarm, NULL);
         m_events->adoptHandler(Event::kTimer, m_keepAliveAlarmTimer,
