@@ -169,3 +169,30 @@ The Windows side will:
 
 External Windows key injection and Karabiner post-processing are not fallback
 paths; they were already tested and found unusable with Barrier's input path.
+
+## Required Karabiner input path
+
+Stable mouse transport and server-side remapping are not the complete product
+goal. Remote keyboard events must ultimately enter macOS through a virtual HID
+keyboard path that Karabiner-Elements can recognize and process as an input
+device. The existing Quartz/CGEvent injection path bypasses Karabiner and does
+not satisfy this requirement.
+
+This is required for the existing Mac-side application conditions, including
+Figma, Photoshop, Illustrator, Finder, browser, and input-source rules.
+Reimplementing all of those application-aware rules on the Windows server is
+not an acceptable substitute because the server does not own the Mac frontmost
+application context.
+
+The intended division is:
+
+1. Windows server remapping normalizes Windows-only source keys that Barrier
+   cannot otherwise preserve, including Korean `Right Alt`/`Hangul`.
+2. The Mac client emits the resulting key through a virtual HID input device.
+3. Karabiner applies the existing Mac-wide and application-specific rules.
+
+The temporary official-client baseline hold above only isolates the Windows
+mouse regression. It does not remove or defer this requirement from the
+definition of a usable release. After the Windows no-remap baseline passes,
+the virtual HID-to-Karabiner path must be restored and validated separately
+without mixing cursor or networking changes into that test.
