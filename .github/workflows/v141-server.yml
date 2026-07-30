@@ -1,0 +1,73 @@
+name: Build v141 Windows server
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-2022
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Visual Studio 2017 toolset
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $setup = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\setup.exe"
+          $installPath = & $vswhere -latest -products * -property installationPath
+          if (-not $installPath) {
+            throw "Visual Studio installation was not found"
+          }
+
+          $process = Start-Process -FilePath $setup -Wait -PassThru -ArgumentList @(
+            "modify",
+            "--installPath", "`"$installPath`"",
+            "--add", "Microsoft.VisualStudio.Component.VC.v141.x86.x64",
+            "--quiet",
+            "--norestart",
+            "--nocache"
+          )
+          if ($process.ExitCode -notin 0, 3010) {
+            throw "Visual Studio Installer failed with exit code $($process.ExitCode)"
+          }
+
+      - name: Configure v141 release build
+        shell: pwsh
+        run: |
+          cmake -S . -B build-v141 `
+            -G "Visual Studio 17 2022" `
+            -A x64 `
+            -T v141 `
+            -DBARRIER_BUILD_GUI=OFF `
+            -DBARRIER_BUILD_INSTALLER=OFF `
+            -DBARRIER_BUILD_TESTS=OFF `
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+
+      - name: Build server
+        shell: pwsh
+        run: cmake --build build-v141 --config Release --target barriers --parallel
+
+      - name: Record binary identity
+        shell: pwsh
+        run: |
+          $exe = "build-v141\bin\Release\barriers.exe"
+          Get-FileHash $exe -Algorithm SHA256
+          & dumpbin /headers $exe | Select-String "machine|linker version|subsystem"
+
+      - name: Assemble server test bundle
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist\v141-server | Out-Null
+          Copy-Item build-v141\bin\Release\barriers.exe dist\v141-server\
+          Copy-Item ext\openssl\windows\x64\bin\*.dll dist\v141-server\
+          Copy-Item README.md,LICENSE dist\v141-server\
+
+      - name: Upload server test bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: barrier-v141-windows-server
+          path: dist/v141-server
