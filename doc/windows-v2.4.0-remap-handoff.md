@@ -125,3 +125,44 @@ ESKui-MacBookPro:
 
 The official Barrier 2.4.0 macOS client maps function keys only through F16.
 F17-F19 must not be used for this baseline.
+
+## 2026-07-30 Windows official-server A/B result
+
+The Windows side repeated the no-remap test with the official Barrier 2.4.0
+Windows release:
+
+```text
+installer SHA256:
+  7E66B7B4D13312E607EDD06F8EA38F3C9B09B3E8AEA2B55250C00B25F9892885
+barriers.exe SHA256:
+  C8A7C7D5CD839023FD482D069F940B2FEF6350C88E3C3DC356F294EAD328ED58
+```
+
+The official Windows server discarded 26 bogus delta motions during the test.
+The identified custom v2.4.0 remap build discarded 9,660 with remaps disabled.
+The official run also confirms the Mac report: the first interval had repeated
+edge crossings, while the later interval had only one immediate re-entry and
+then remained usable on the Mac.
+
+This comparison moves the primary fault away from the macOS client and the
+remap rules. The current suspect is the Windows custom build output or its
+toolchain. The official v2.4.0 Windows release was built by the release-era
+Visual Studio 2017 pipeline; the current package used Visual Studio 2022.
+
+The earlier instruction to proceed immediately to the `DEBUG1` Right Alt test
+is now on hold. Do not make more Mac input, event-loop, cursor, or networking
+changes, and do not run another coordinated test until Windows publishes a new
+server binary identity and explicitly requests a reconnect.
+
+The Windows side will:
+
+1. Rebuild the v2.4.0 remap source with the release-era v141/Visual Studio 2017
+   toolchain as closely as possible.
+2. Test that binary with no remaps before packaging.
+3. Proceed to the `Right Alt`/`Hangul` to F16 `DEBUG1` test only if mouse
+   behavior matches the official server.
+4. Stop this fork approach if the toolchain-parity build still fails the
+   no-remap mouse baseline.
+
+External Windows key injection and Karabiner post-processing are not fallback
+paths; they were already tested and found unusable with Barrier's input path.
