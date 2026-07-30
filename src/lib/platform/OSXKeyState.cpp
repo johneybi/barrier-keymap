@@ -267,14 +267,18 @@ private:
     bool start()
     {
 #if BARRIER_ENABLE_MAC_VIRTUAL_HID
-        static const char* s_socket =
-            "/Library/Application Support/org.pqrs/tmp/rootonly/vhidd_server";
+        const std::filesystem::path socket =
+            pqrs::karabiner::driverkit::virtual_hid_device_service::
+                constants::get_server_socket_file_path();
+        const std::string socketPath = socket.string();
 
-        if (access(s_socket, R_OK) != 0) {
+        if (access(socketPath.c_str(), R_OK) != 0) {
             LOG((CLOG_WARN
                 "BARRIER_MAC_KEY_OUTPUT=virtual-hid requested, but the "
-                "Karabiner VirtualHID root-only socket is not accessible; "
-                "run the macOS client with suitable privileges or use IOHID"));
+                "Karabiner VirtualHID root-only socket at %s is not "
+                "accessible; "
+                "run the macOS client with suitable privileges or use IOHID",
+                socketPath.c_str()));
             return false;
         }
 

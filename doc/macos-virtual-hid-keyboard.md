@@ -410,12 +410,11 @@ vendor_id: 0x1209 (4617)
 product_id: 0x4b42 (19266)
 ```
 
-The client connects to root-only local datagram sockets under:
+The client uses the root-only Unix domain service socket returned by the
+installed VirtualHID client headers. With the current headers, it is:
 
 ```text
-/Library/Application Support/org.pqrs/tmp/rootonly/vhidd_server
-/Library/Application Support/org.pqrs/tmp/rootonly/vhidd_response
-/Library/Application Support/org.pqrs/tmp/rootonly/vhidd_client
+/Library/Application Support/org.pqrs/tmp/rootonly/karabiner_virtual_hid_device_service.sock
 ```
 
 So a normal user process cannot assume it can directly access the daemon. The
@@ -425,15 +424,10 @@ practical choices are:
 - add a small privileged helper that owns the VirtualHID connection, or
 - integrate through a service installed with proper privileges.
 
-This was confirmed locally: running the compiled example as the normal user
-failed before connection with:
-
-```text
-filesystem_error: posix_stat Permission denied
-["/Library/Application Support/org.pqrs/tmp/rootonly/vhidd_server"]
-```
-
-The local probe now performs this preflight and prints:
+Running the compiled client as a normal user fails the root-only socket
+preflight. The integration uses the official
+`constants::get_server_socket_file_path()` API instead of hardcoding a
+version-specific path.
 
 ```text
 cannot access Karabiner VirtualHID root-only socket: ...

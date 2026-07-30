@@ -18,8 +18,6 @@ constexpr auto kBarrierVendorId =
     pqrs::hid::vendor_id::value_t(0x1209);
 constexpr auto kBarrierProductId =
     pqrs::hid::product_id::value_t(0x4b42);
-constexpr const char* kVirtualHIDServerSocket =
-    "/Library/Application Support/org.pqrs/tmp/rootonly/vhidd_server";
 
 std::atomic_bool exit_requested(false);
 
@@ -45,9 +43,13 @@ int main(int argc, char* argv[]) {
   std::signal(SIGINT, handle_signal);
   std::signal(SIGTERM, handle_signal);
 
-  if (access(kVirtualHIDServerSocket, R_OK) != 0) {
+  const auto socket =
+      pqrs::karabiner::driverkit::virtual_hid_device_service::constants::
+          get_server_socket_file_path();
+
+  if (access(socket.c_str(), R_OK) != 0) {
     std::cerr << "cannot access Karabiner VirtualHID root-only socket: "
-              << kVirtualHIDServerSocket << std::endl;
+              << socket << std::endl;
     std::cerr << "run this probe with sudo." << std::endl;
     return 1;
   }

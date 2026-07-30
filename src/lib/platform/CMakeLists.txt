@@ -61,7 +61,7 @@ if (APPLE)
         set_source_files_properties(
             "${CMAKE_CURRENT_SOURCE_DIR}/OSXKeyState.cpp"
             PROPERTIES
-                COMPILE_FLAGS "-std=c++20")
+                COMPILE_FLAGS "-std=c++23")
         target_compile_definitions(platform PRIVATE BARRIER_ENABLE_MAC_VIRTUAL_HID=1)
         target_include_directories(platform PRIVATE
             "${KARABINER_VHID_REPO}/include"
