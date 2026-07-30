@@ -602,29 +602,27 @@ After the duplicate clients were removed, one Mac client connected to the
 Windows v141 server and completed the Barrier 1.6 handshake. The connection
 remained established, but mouse movement was again severely stuttered.
 
-An explicitly coordinated Right Alt tap was performed while the pointer was
-intended to be on the Mac screen. The Mac received no key-down or key-up
-message. At the test timestamp it received only:
+During the same run, the Mac received repeated screen transitions, including:
 
 ```text
 [2026-07-31T00:52:28] DEBUG1: recv leave
 [2026-07-31T00:52:28] INFO: leaving screen
+[2026-07-31T00:52:31] DEBUG1: recv enter, 0,657 15 0000
+[2026-07-31T00:52:33] DEBUG1: recv leave
 ```
 
-The client then received another `enter` at `00:52:31` and another `leave` at
-`00:52:33`. This identifies the visible reaction as a Barrier screen leave,
-not Return, F16, or another macOS key. Right Alt remapping cannot be evaluated
-while the server repeatedly changes the active screen and sends no key event.
+These transitions remain relevant to the mouse-stutter investigation, but
+they must not be attributed to the Right Alt test described below.
 
 The privileged VirtualHID helper also accepted and then lost the Barrier Unix
 socket connection during this run. That is a separate Mac keyboard-output
-issue, but it cannot explain the missing server key packet or the repeated
-screen enter/leave events.
+issue and cannot explain the repeated screen enter/leave events.
 
-### Karabiner EventViewer capture
+### Invalid Right Alt attribution
 
-A later isolated Right Alt test was captured in Karabiner-EventViewer. The
-visible output sequence was:
+The user later confirmed that the keyboard used for the Right Alt tests was
+accidentally connected directly to the Mac, not to the Windows Barrier server.
+The Karabiner-EventViewer sequence:
 
 ```text
 right_option down
@@ -638,8 +636,8 @@ EventViewer attributed these post-modification events to
 contains a Korean-input rule described as `오른쪽 option 키를 사용하여 한글을
 한자로 변환`, which maps `right_option` to `right_option + return_or_enter`.
 
-This explains both user-visible results: Return can look like a newline when
-there is no convertible Korean text, while Korean text produces the attached
-Hanja candidate popover. The intended F16 event was not observed. The Windows
-side must verify that the active server config loaded the `right_alt` and
-`hangul` tap rules and logged the tap output as F16 before another Mac key test.
+This correctly explains the local newline and Hanja candidate popover, but it
+provides no evidence about Windows Right Alt, Barrier remapping, F16 output, or
+the VirtualHID bridge. Discard all remote-key conclusions from this capture.
+Repeat the test only after verifying that the physical keyboard is attached to
+Windows and that the Mac has no directly connected test keyboard.
