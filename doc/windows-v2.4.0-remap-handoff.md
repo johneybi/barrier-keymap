@@ -150,9 +150,12 @@ toolchain. The official v2.4.0 Windows release was built by the release-era
 Visual Studio 2017 pipeline; the current package used Visual Studio 2022.
 
 The earlier instruction to proceed immediately to the `DEBUG1` Right Alt test
-is now on hold. Do not make more Mac input, event-loop, cursor, or networking
-changes, and do not run another coordinated test until Windows publishes a new
-server binary identity and explicitly requests a reconnect.
+is now on hold. Keep the official macOS 2.4.0 client unchanged as the known-good
+comparison endpoint, and do not repeat the same coordinated connection test
+until Windows publishes a new server binary identity and requests a reconnect.
+This does not pause the project or prohibit independent Mac-side analysis; it
+only avoids changing the validated client baseline while the failing Windows
+build is replaced.
 
 The Windows side will:
 
