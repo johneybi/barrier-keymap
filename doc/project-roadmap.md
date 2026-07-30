@@ -31,6 +31,11 @@ Native macOS key output remains the default. VirtualHID must be opt-in, use a
 stable vendor/product identity, fall back safely when unavailable, and avoid
 feeding Karabiner's own output back into the bridge.
 
+The complete Barrier client must not run as root. A root-client experiment
+initialized the VirtualHID keyboard successfully but failed to join the
+logged-in user's macOS event queue. The supported architecture requires an
+unprivileged Barrier client plus a narrowly scoped privileged keyboard helper.
+
 ## Experimental input work
 
 Carbon wake scheduling, socket diagnostics, mouse compression, and cursor warp

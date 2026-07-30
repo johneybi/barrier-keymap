@@ -298,6 +298,29 @@ Current limitations:
 - media keys still use the existing separate `fakeMediaKey` path
 - this is intended for command-line `barrierc` testing before GUI packaging
 
+### Root client test result
+
+Running the complete Barrier client as root is not a viable privilege model.
+On 2026-07-30, the v2.4.0 VirtualHID build reached:
+
+```text
+macOS key output: Karabiner VirtualHID keyboard
+Barrier input VirtualHID keyboard ready=true
+```
+
+but the root process saw a different display topology than the logged-in user
+and then terminated with:
+
+```text
+event queue is not ready within 5 sec
+```
+
+The production path must therefore keep `barrierc` in the logged-in user
+session and move only the Karabiner VirtualHID service connection into a small
+privileged helper. The helper must accept full keyboard reports from the local
+Barrier client, validate the connecting user, post them to the root-only
+Karabiner service, and send an empty report when either side disconnects.
+
 ## Confirmed Karabiner VirtualHID facts
 
 The upstream `Karabiner-DriverKit-VirtualHIDDevice` client example uses:
