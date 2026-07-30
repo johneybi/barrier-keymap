@@ -5,10 +5,15 @@ independently from key mapping behavior.
 
 ## Stable core
 
-The `stable/server-remap` branch keeps Barrier's upstream mouse, socket, and
-platform event paths. It adds only server-side key remapping, configuration,
-and tests. The first end-to-end target is a Windows server with the official
-Barrier macOS client, using F16 as the input-source shortcut.
+The `stable/v2.4.0-server-remap` branch starts at the exact Barrier v2.4.0
+release tag (`3e0d758b`). It keeps the release mouse, socket, platform event,
+and client paths unchanged, and adds only server-side key remapping,
+configuration, tests, documentation, and build portability includes. The first
+end-to-end target is a Windows server with the official Barrier macOS client.
+
+The older `stable/server-remap` branch is retained for investigation only. It
+was based on a post-release upstream commit and includes Windows cursor-warp
+experiments, so it is not the release baseline.
 
 ## Extended macOS keys
 
