@@ -583,3 +583,15 @@ that automatically starts another copy. Keep the privileged VirtualHID helper
 running, then start exactly one `barrierc` process from commit `6867d3dc` or
 later. Verify locally that only one client process exists before allowing it to
 connect to `192.168.0.10:24800`.
+
+### Mac cleanup result
+
+The Mac found three stale `barrierc` processes: two user-session clients and
+one earlier root daemon. All three were stopped while the privileged
+VirtualHID helper remained running. Exactly one client was then started from
+commit `607c5a86`.
+
+The remaining client currently reaches `192.168.0.10:24800` as a single
+`SYN_SENT` connection, but the TCP attempt times out after 15 seconds. The
+Windows server should be restarted after its duplicate-client disconnect
+crash; the Mac client will continue retrying automatically.
