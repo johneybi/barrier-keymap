@@ -161,6 +161,42 @@ onKeyUp screen=... key=... id=... button=...
 The raw Windows KeyID and remapper output must be identified before drawing a
 conclusion about the Right Alt rule.
 
+### Isolated Right Alt capture
+
+The Right Alt test was repeated with an explicit `17:18:37` marker. The user
+pressed and released Right Alt exactly once before typing the confirmation
+message. At `17:18:44`, the official Mac client received:
+
+```text
+recv key down id=0x0000ef31, mask=0x0000, button=0x0138
+key ef31 is not on keyboard
+recv key up id=0x0000ef31, mask=0x0000, button=0x0138
+```
+
+`0xEF31` is Barrier `Hangul`. This event is distinct from the confirmation
+message that started at `17:18:49`. The Windows server recognized the Korean
+Right Alt/Hangul input but relayed it unchanged, so the official Mac client
+discarded it before Karabiner could receive the intended F16 trigger.
+
+Ensure the active Windows server configuration contains the following rules
+under the exact canonical Mac screen name, then restart the server:
+
+```text
+section: remaps
+  ESKui-MacBookPro:
+    right_alt.alone = F16
+    right_alt.hold = right_super
+    hangul.alone = F16
+    hangul.hold = right_super
+end
+```
+
+On the next isolated tap, the Windows log must show the Hangul tap rule
+producing F16, and the Mac log must receive `id=0xEFCD`. If the Mac still
+receives `0xEF31`, verify that the running `barriers.exe` is the remap build and
+that it loaded the edited configuration file rather than a GUI-generated or
+temporary config without `section: remaps`.
+
 ## 2026-07-30 Windows official-server A/B result
 
 The Windows side repeated the no-remap test with the official Barrier 2.4.0
