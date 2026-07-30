@@ -119,6 +119,7 @@ private:
     bool                m_compressMouseRelative;
     SInt32                m_xMouse, m_yMouse;
     SInt32                m_dxMouse, m_dyMouse;
+    Stopwatch            m_mouseFlushTimer;
 
     bool                m_ignoreMouse;
 
