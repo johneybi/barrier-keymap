@@ -66,7 +66,17 @@ jobs:
         run: cmake --build build --target barriers barrierc --parallel
 
       - name: Assemble archive
-        run: ./package_keymap_release.sh build "${{ matrix.artifact }}" dist
+        run: |
+          mkdir -p "dist/${{ matrix.artifact }}"
+          cp build/bin/barriers "dist/${{ matrix.artifact }}/"
+          cp build/bin/barrierc "dist/${{ matrix.artifact }}/"
+          cp README.md LICENSE "dist/${{ matrix.artifact }}/"
+          cp doc/barrier.conf.example-remaps doc/key-remaps.md \
+            "dist/${{ matrix.artifact }}/"
+          tar -C dist -czf "dist/${{ matrix.artifact }}.tar.gz" \
+            "${{ matrix.artifact }}"
+          shasum -a 256 "dist/${{ matrix.artifact }}.tar.gz" \
+            > "dist/${{ matrix.artifact }}.tar.gz.sha256"
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
@@ -94,6 +104,23 @@ jobs:
         with:
           ref: ${{ inputs.source_ref || github.ref }}
           submodules: recursive
+
+      - name: Check out release tools
+        if: inputs.source_ref != ''
+        uses: actions/checkout@v4
+        with:
+          ref: master
+          path: .release-tools
+          sparse-checkout: |
+            clean_build.bat
+            build_installer.bat
+
+      - name: Use current release tools
+        if: inputs.source_ref != ''
+        shell: pwsh
+        run: |
+          Copy-Item .release-tools\clean_build.bat .\clean_build.bat -Force
+          Copy-Item .release-tools\build_installer.bat .\build_installer.bat -Force
 
       - name: Install Bonjour SDK-like
         shell: pwsh
