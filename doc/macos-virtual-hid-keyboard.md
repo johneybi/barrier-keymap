@@ -774,3 +774,49 @@ This leaves two honest product paths:
    distribute, but those events do not pass through Karabiner manipulators.
 
 The transport and recovery work completed so far applies to both paths.
+
+## Decision: implement mappings in the macOS Barrier client
+
+The user selected product path 2 for the fastest usable result. The macOS side
+owns this implementation because it must build, run, and validate the
+`OSXKeyState` injection path against the active macOS input sources.
+
+Keep the verified Windows contract unchanged:
+
+```text
+Windows Right Alt / Hangul tap
+-> server remapper F16
+-> macOS Barrier client
+```
+
+Do not replace F16 with F18 or F19. The first macOS client mapping must consume
+an F16 tap and emit a balanced `left_control + spacebar` press/release sequence
+through the existing direct macOS HID output path. Suppress the original F16
+from applications. The server already resolves a held Right Alt / Hangul key
+to `right_super`, so the client must not turn that hold path into an input
+source toggle.
+
+Implementation requirements:
+
+- perform the mapping before the final macOS HID report is emitted;
+- keep key-down and key-up state balanced so Control cannot remain stuck;
+- produce exactly one input-source toggle per F16 tap;
+- retain the existing VirtualHID reconnect and IOHID fallback behavior;
+- add a low-volume INFO diagnostic for the transformed gesture;
+- add focused tests for tap, repeated taps, unrelated F16 state, and cleanup
+  after output failure or disconnect.
+
+Acceptance test:
+
+1. Right Alt tap toggles Korean/English exactly once.
+2. Right Alt hold does not toggle and retains the configured `right_super`
+   behavior.
+3. Control is not stuck after repeated toggles or reconnects.
+4. Pointer movement and return to Windows remain smooth.
+
+The Windows test on 2026-07-31 used server commit `02a4e3f8`, SSL disabled,
+and INFO logging. The Mac client connected successfully and pointer movement
+was smooth. `TCP_NODELAY` verified as enabled, with up to 823 actual socket
+writes per second and only 12-89 bytes of queued output. DEBUG1 must remain
+disabled for usability testing because its event-volume logging was the
+remaining cause of severe pointer stutter.
