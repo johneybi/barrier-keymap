@@ -1,6 +1,6 @@
 # Mac to Windows test handoff
 
-## 2026-07-31 live result: smooth cursor, Right Alt sent as Return
+## 2026-07-31 live result: smooth cursor, Right Alt sent as F16
 
 The latest `origin/master` Mac client (`49ebeaee`) was built from a clean
 worktree and connected to the Windows server with TLS disabled.
@@ -8,27 +8,30 @@ worktree and connected to the Windows server with TLS disabled.
 - Sustained mouse movement was smooth enough for normal use.
 - Physical Right Alt on the Windows keyboard did not switch the macOS input
   source.
-- The Mac client received the following protocol event:
+- A full-log review found repeated Right Alt tap events:
 
 ```text
-recv key down id=0x0000ef0d, mask=0x0000, button=0x001c
-button=0x0025 virtualKey=0x0024 keyDown=down
-recv key up id=0x0000ef0d, mask=0x0000, button=0x001c
-button=0x0025 virtualKey=0x0024 keyDown=up
+recv key down id=0x0000efcd, mask=0x0000, button=0x0138
+button=0x006b virtualKey=0x006a keyDown=down
+recv key up id=0x0000efcd, mask=0x0000, button=0x0138
+button=0x006b virtualKey=0x006a keyDown=up
 ```
 
-`0xEF0D` is Barrier `Return`, and macOS virtual key `0x24` is Return. This
-explains the previously observed newline behavior. The Windows server must
-emit `F19` (`0xEFD0`) for this tap. The Mac is now configured to use F19 for
-input-source switching, and the current Mac client maps F19 to macOS virtual
-key `0x50`.
+`0xEFCD` is Barrier F16, and macOS virtual key `0x6a` is F16. This confirms
+that the Windows Right Alt/Hangul tap remap and protocol delivery work. The
+single `0xEF0D` event cited in the previous version of this section was the
+real Enter key used to submit the test message, not Right Alt.
 
-Do not work around this on the Mac by remapping received Return: the protocol
-event is indistinguishable from a real Enter key at that point. Diagnose the
-Windows event before and after `KeyRemapper`, including the raw virtual key,
-scan code/button, detected `KeyID`, selected tap rule, and emitted `KeyID`.
-Also verify that the running Windows binary and configuration are from the
-current build rather than an older packaged source ref.
+The Mac is now configured to use F19 for input-source switching, and the
+current `master` Mac client maps F19 to macOS virtual key `0x50`. Before adding
+a new F16-to-Control+Space transform in the client, change the Windows
+Right Alt/Hangul tap output to F19 and test the existing direct macOS path.
+This is the smallest next experiment and avoids adding another state machine.
+
+The privileged VirtualHID helper has been stopped and removed from the live
+test path. It competed with Karabiner Core Service and caused local keyboard
+timeouts and resets. The current smooth-pointer test uses ordinary IOHID
+output with no `BARRIER_MAC_KEY_OUTPUT=virtual-hid` setting.
 
 ## Cursor regression observed on Mac
 
