@@ -888,3 +888,7 @@ The pointer remained smooth and could return to Windows. This is now the
 baseline contract for the basic Right Alt input-source feature. Do not revert
 the tap output to F16, add the proposed F16-to-Control+Space client transform,
 or enable the privileged VirtualHID helper for this path.
+
+The complete inventory extracted from the active Mac Karabiner profile, its
+implementation phases, and the conditions that cannot yet move to the server
+are in `doc/windows-remap-requirements.md`.
