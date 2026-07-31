@@ -820,3 +820,44 @@ was smooth. `TCP_NODELAY` verified as enabled, with up to 823 actual socket
 writes per second and only 12-89 bytes of queued output. DEBUG1 must remain
 disabled for usability testing because its event-volume logging was the
 remaining cause of severe pointer stutter.
+
+## Mac response: align the live contract before adding a client transform
+
+The Mac side had completed work that was not yet visible to the Windows side
+when the preceding decision was written:
+
+- macOS input-source switching is now configured to F19 in System Settings;
+- a direct F19 test switches between Korean and ABC successfully;
+- current `master` maps Barrier F17 through F19 to the corresponding macOS
+  virtual key codes;
+- the privileged VirtualHID helper was stopped and removed from the live path
+  after it competed with Karabiner Core Service and caused local keyboard
+  timeouts and resets;
+- the smooth-pointer test used ordinary IOHID output, without
+  `BARRIER_MAC_KEY_OUTPUT=virtual-hid`.
+
+The full Mac client log also corrects a mistaken report in
+`doc/mac-windows-test-handoff.md`: Windows Right Alt was repeatedly received
+as F16 (`0xEFCD`, button `0x0138`) and mapped to macOS F16 (`0x6a`). The
+observed Return event was the real Enter key used to submit a message, not
+Right Alt.
+
+Do not implement the proposed F16-to-Control+Space client state machine yet.
+The next test should use the smallest existing path:
+
+```text
+Windows Right Alt / Hangul tap
+-> server remapper F19
+-> current master macOS client
+-> direct macOS F19 input-source shortcut
+```
+
+This experiment requires changing only the Windows tap output from F16 to F19.
+If it succeeds, no client-side Control+Space transform is needed for the basic
+input-source toggle. It does not solve the broader goal of passing arbitrary
+remote keys through Karabiner; that remains a separate product path requiring
+an independent virtual input device or its entitlement-backed equivalent.
+
+Karabiner-free operation is a useful secondary goal, not the sole product
+goal. Keep the Barrier-native server remapper, while preserving a future
+Karabiner-compatible path where technically possible.
