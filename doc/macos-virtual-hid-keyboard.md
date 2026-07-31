@@ -892,3 +892,38 @@ or enable the privileged VirtualHID helper for this path.
 The complete inventory extracted from the active Mac Karabiner profile, its
 implementation phases, and the conditions that cannot yet move to the server
 are in `doc/windows-remap-requirements.md`.
+
+## Chromium Korean composition regression
+
+The successful F19 toggle is not yet sufficient for general text input.
+Application behavior differs after the Mac input source changes to Korean:
+
+- the Codex text field composes `gksrmf` as `한글`;
+- the YouTube search field in Chromium has produced unchanged Latin text and
+  decomposed Jamo such as `ㅎㅏㄴㄱㅡㄹ`;
+- the macOS input-source indicator and
+  `AppleCurrentKeyboardLayoutInputSourceID` both report two-set Korean.
+
+The client protocol log proves that Windows is not sending precomposed or
+decomposed Korean characters. It sends Latin key IDs and the Mac maps them to
+the expected physical virtual keys. During the same input, the Mac client logs
+`can't get the active group, use the first group instead` for every printable
+key.
+
+An opt-in experiment replaced non-modifier `IOHIDPostEvent` calls with
+`CGEventCreateKeyboardEvent` and `CGEventPost(kCGHIDEventTap)`. It did not fix
+Chromium composition and it prevented the F19 input-source shortcut from
+working reliably. The experiment was rejected, its code was removed, and the
+live client was restored to ordinary IOHID output with INFO logging.
+
+Do not change the proven Windows F19 remap in response to this regression.
+The next investigation belongs to the Mac client:
+
+1. distinguish input-source selection from text composition in tests;
+2. fix or replace `pollActiveGroup`, which currently calls TIS from the input
+   path and falls back to group zero;
+3. compare physical, IOHID, and application event fields in a Chromium text
+   input without replacing the production injection path;
+4. verify Codex, Chromium, Safari, and a native TextEdit field separately;
+5. keep the restored IOHID client as the usability baseline until a candidate
+   passes both F19 and composition tests.
