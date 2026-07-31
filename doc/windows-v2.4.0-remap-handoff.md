@@ -331,3 +331,30 @@ the known working remap configuration and concentrate only on preserving the
 usable mouse-delivery baseline. A Windows DEBUG1 capture of the same tap is
 useful corroboration, but it is no longer required to identify the failing
 stage.
+
+## 2026-08-01 extra mouse button observation
+
+The user reported that the physical mouse's side Back button triggered an
+unexpected action on the Mac target. Testing was stopped for the day, so the
+exact action and live button trace have not yet been captured.
+
+The existing path is independent of keyboard remapping:
+
+1. The Windows server maps `XBUTTON1` and `XBUTTON2` to Barrier
+   `kButtonExtra0` and `kButtonExtra1`.
+2. The Mac client maps those IDs to Quartz button indexes 3 and 4.
+3. Quartz posts them as generic `kCGEventOtherMouseDown` and
+   `kCGEventOtherMouseUp` events.
+
+This preserves numbered mouse buttons, but it does not explicitly encode the
+semantic actions Browser Back and Browser Forward. Their behavior may
+therefore depend on the target application or the local mouse driver. Do not
+change the keyboard remapper or reconnect the client to investigate this.
+
+For the next isolated test, enable `DEBUG1`, press side Back once and side
+Forward once, and record the incoming Barrier button IDs and the Mac
+`faking mouse button id` lines. Repeat once in a browser and once in Finder.
+If the IDs are correct but the actions remain application-dependent, add an
+explicit, target-screen mouse-button mapping instead of changing the global
+Barrier button numbering. If the actions are merely reversed, fix the
+`Extra0`/`Extra1` mapping with a focused regression test.
