@@ -861,3 +861,30 @@ an independent virtual input device or its entitlement-backed equivalent.
 Karabiner-free operation is a useful secondary goal, not the sole product
 goal. Keep the Barrier-native server remapper, while preserving a future
 Karabiner-compatible path where technically possible.
+
+## Confirmed live result: F19 input-source toggle
+
+The coordinated Windows-to-Mac test on 2026-07-31 succeeded with:
+
+```text
+Windows Right Alt / Hangul tap
+-> server remapper F19
+-> macOS Barrier client direct IOHID output
+-> macOS F19 input-source shortcut
+-> Korean/English input source toggled exactly once
+```
+
+The Windows server used commit `02a4e3f8`, SSL disabled, INFO logging, and the
+following destination remap:
+
+```text
+right_alt.alone = F19
+right_alt.hold = right_super
+hangul.alone = F19
+hangul.hold = right_super
+```
+
+The pointer remained smooth and could return to Windows. This is now the
+baseline contract for the basic Right Alt input-source feature. Do not revert
+the tap output to F16, add the proposed F16-to-Control+Space client transform,
+or enable the privileged VirtualHID helper for this path.
