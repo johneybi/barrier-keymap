@@ -76,6 +76,7 @@ canonicalRemapKeyName(const std::string& name)
 		{ "left_cmd", "Super_L" },
 		{ "right_cmd", "Super_R" },
 		{ "hangul", "Hangul" },
+		{ "print_screen", "Print" },
 		{ "space", "Space" }
 	};
 
@@ -1274,20 +1275,23 @@ Config::readSectionRemaps(ConfigReadContext& s)
 		}
 
 		if (suffix.empty()) {
-			if (from.find('+') != std::string::npos) {
+			if (from.find('+') != std::string::npos ||
+				to.find('+') != std::string::npos) {
 				KeyModifierMask fromMask = 0;
 				KeyID fromID = kKeyNone;
 				KeyModifierMask toMask = 0;
 				KeyID toID = kKeyNone;
 				parseRemapKeystroke(s, from, fromMask, fromID);
 				parseRemapKeystroke(s, to, toMask, toID);
-				if (fromMask == 0) {
-					throw XConfigRead(s,
-						"modifier chord remap requires at least one modifier");
-				}
 
 				ScreenChordKey chordKey(screen, ChordKey(fromID, fromMask));
 				if (chordRules.find(chordKey) != chordRules.end()) {
+					throw XConfigRead(s, "duplicate remap source \"%{1}\"", from);
+				}
+				if (fromMask == 0 &&
+					(m_keyRemapConfig.findRule(screen, fromID) != NULL ||
+						pendingTapRules.find(TapKey(screen, fromID)) !=
+							pendingTapRules.end())) {
 					throw XConfigRead(s, "duplicate remap source \"%{1}\"", from);
 				}
 				chordRules[chordKey] = true;
@@ -1299,8 +1303,10 @@ Config::readSectionRemaps(ConfigReadContext& s)
 			KeyID fromID = parseRemapKey(s, from);
 			KeyID toID = parseRemapKey(s, to);
 			TapKey tapKey(screen, fromID);
+			ScreenChordKey chordKey(screen, ChordKey(fromID, 0));
 			if (m_keyRemapConfig.findRule(screen, fromID) != NULL ||
-				pendingTapRules.find(tapKey) != pendingTapRules.end()) {
+				pendingTapRules.find(tapKey) != pendingTapRules.end() ||
+				chordRules.find(chordKey) != chordRules.end()) {
 				throw XConfigRead(s, "duplicate remap source \"%{1}\"", from);
 			}
 			m_keyRemapConfig.addRule(screen, fromID, toID);

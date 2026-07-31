@@ -258,6 +258,29 @@ TEST(KeyRemapperTests, chordRuleDoesNotMatchExtraModifiers)
 		KeyModifierControl | KeyModifierShift, kSpaceButton);
 }
 
+TEST(KeyRemapperTests, unmodifiedKeyCanEmitModifierChord)
+{
+	KeyRemapConfig config;
+	config.addChordRule("mac", 0, kKeyPrint,
+		KeyModifierSuper | KeyModifierShift, '4');
+
+	KeyRemapper remapper(config);
+	KeyRemapper::KeyEventList down =
+		remapper.remapKeyDown("mac", kKeyPrint, 0, 0x0063);
+	KeyRemapper::KeyEventList repeat =
+		remapper.remapKeyRepeat("mac", kKeyPrint, 0, 1, 0x0063);
+	KeyRemapper::KeyEventList up =
+		remapper.remapKeyUp("mac", kKeyPrint, 0, 0x0063);
+
+	ASSERT_EQ(2u, down.size());
+	expectEvent(down[0], KeyRemapper::KeyEvent::kDown, '4',
+		KeyModifierSuper | KeyModifierShift, 0x0063);
+	expectEvent(down[1], KeyRemapper::KeyEvent::kUp, '4',
+		KeyModifierSuper | KeyModifierShift, 0x0063);
+	EXPECT_TRUE(repeat.empty());
+	EXPECT_TRUE(up.empty());
+}
+
 TEST(KeyRemapperTests, configReadsChordRulesFromRemapsSection)
 {
 	Config config;
@@ -283,6 +306,32 @@ TEST(KeyRemapperTests, configReadsChordRulesFromRemapsSection)
 	EXPECT_EQ(0u, rule->m_toMask);
 	EXPECT_EQ(kKeyF19, rule->m_toID);
 }
+
+TEST(KeyRemapperTests, configReadsUnmodifiedSourceToChordTarget)
+{
+	Config config;
+	std::stringstream stream;
+	stream
+		<< "section: screens\n"
+		<< "\tserver:\n"
+		<< "\tmac:\n"
+		<< "end\n"
+		<< "section: remaps\n"
+		<< "\tmac:\n"
+		<< "\t\tprint_screen = command+shift+4\n"
+		<< "end\n";
+
+	stream >> config;
+
+	const KeyRemapConfig::ChordRule* rule =
+		config.getKeyRemapConfig().findChordRule("mac", kKeyPrint, 0);
+	ASSERT_TRUE(rule != NULL);
+	EXPECT_EQ(0u, rule->m_fromMask);
+	EXPECT_EQ(kKeyPrint, rule->m_fromID);
+	EXPECT_EQ(KeyModifierSuper | KeyModifierShift, rule->m_toMask);
+	EXPECT_EQ('4', rule->m_toID);
+}
+
 TEST(KeyRemapperTests, configReadsHangulTapAlias)
 {
 	Config config;
