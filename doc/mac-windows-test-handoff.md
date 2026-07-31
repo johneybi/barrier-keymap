@@ -1,5 +1,35 @@
 # Mac to Windows test handoff
 
+## 2026-07-31 live result: smooth cursor, Right Alt sent as Return
+
+The latest `origin/master` Mac client (`49ebeaee`) was built from a clean
+worktree and connected to the Windows server with TLS disabled.
+
+- Sustained mouse movement was smooth enough for normal use.
+- Physical Right Alt on the Windows keyboard did not switch the macOS input
+  source.
+- The Mac client received the following protocol event:
+
+```text
+recv key down id=0x0000ef0d, mask=0x0000, button=0x001c
+button=0x0025 virtualKey=0x0024 keyDown=down
+recv key up id=0x0000ef0d, mask=0x0000, button=0x001c
+button=0x0025 virtualKey=0x0024 keyDown=up
+```
+
+`0xEF0D` is Barrier `Return`, and macOS virtual key `0x24` is Return. This
+explains the previously observed newline behavior. The Windows server must
+emit `F19` (`0xEFD0`) for this tap. The Mac is now configured to use F19 for
+input-source switching, and the current Mac client maps F19 to macOS virtual
+key `0x50`.
+
+Do not work around this on the Mac by remapping received Return: the protocol
+event is indistinguishable from a real Enter key at that point. Diagnose the
+Windows event before and after `KeyRemapper`, including the raw virtual key,
+scan code/button, detected `KeyID`, selected tap rule, and emitted `KeyID`.
+Also verify that the running Windows binary and configuration are from the
+current build rather than an older packaged source ref.
+
 ## Cursor regression observed on Mac
 
 Testing Windows server commit `9c7882b5` with Mac client
