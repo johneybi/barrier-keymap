@@ -51,6 +51,7 @@ jobs:
             qt_prefix="$(brew --prefix qt@5)"
           fi
           cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=Release \
             -DBARRIER_BUILD_GUI=ON \
             -DBARRIER_BUILD_TESTS=ON \
             -DBARRIER_BUILD_INSTALLER=${{ runner.os == 'macOS' && 'ON' || 'OFF' }} \
