@@ -32,10 +32,6 @@
 #include <QLockFile>
 #include <QStandardPaths>
 
-#if defined(Q_OS_MAC)
-#include <Carbon/Carbon.h>
-#endif
-
 #ifdef Q_OS_DARWIN
 #include <cstdlib>
 #endif
@@ -50,10 +46,6 @@ public:
 };
 
 int waitForTray();
-
-#if defined(Q_OS_MAC)
-bool checkMacAssistiveDevices();
-#endif
 
 int main(int argc, char* argv[])
 {
@@ -100,10 +92,6 @@ int main(int argc, char* argv[])
 		return 1;
 	}
 
-	if (!checkMacAssistiveDevices())
-	{
-		return 1;
-	}
 #endif
 
 	int trayAvailable = waitForTray();
@@ -166,49 +154,3 @@ int waitForTray()
 	}
 	return true;
 }
-
-#if defined(Q_OS_MAC)
-bool checkMacAssistiveDevices()
-{
-#if __MAC_OS_X_VERSION_MIN_REQUIRED >= 1090 // mavericks
-
-	// new in mavericks, applications are trusted individually
-	// with use of the accessibility api. this call will show a
-	// prompt which can show the security/privacy/accessibility
-	// tab, with a list of allowed applications. barrier should
-	// show up there automatically, but will be unchecked.
-
-	if (AXIsProcessTrusted()) {
-		return true;
-	}
-
-	const void* keys[] = { kAXTrustedCheckOptionPrompt };
-	const void* trueValue[] = { kCFBooleanTrue };
-	CFDictionaryRef options = CFDictionaryCreate(NULL, keys, trueValue, 1, NULL, NULL);
-
-	bool result = AXIsProcessTrustedWithOptions(options);
-	CFRelease(options);
-	if (!result) {
-        QMessageBox::information(
-            NULL, "Barrier needs Accessibility permission",
-            "Allow Barrier in System Settings > Privacy & Security > "
-            "Accessibility, then open Barrier again.");
-    }
-	return result;
-
-#else
-
-	// now deprecated in mavericks.
-	bool result = AXAPIEnabled();
-	if (!result) {
-		QMessageBox::information(
-			NULL, "Barrier",
-			"Please enable access to assistive devices "
-			"System Preferences -> Security & Privacy -> "
-			"Privacy -> Accessibility, then re-open Barrier.");
-	}
-	return result;
-
-#endif
-}
-#endif

@@ -166,8 +166,8 @@ Implemented GUI behavior:
   starts another client;
 - a stopped child process is deleted before automatic restart, preventing
   stale process objects from accumulating;
-- missing Accessibility permission produces a visible instruction and the app
-  exits until the user grants permission;
+- the GUI does not require Accessibility permission merely to manage a client;
+  the actual primary/server process retains its platform permission check;
 - macOS CI now builds the Qt GUI, runs GUI tests, creates a signed app bundle,
   and uploads the DMG artifact.
 
@@ -332,3 +332,18 @@ mouse=421 forwarded=114 compressed=414
 The user confirmed that pointer motion was smooth again. This validates the
 macOS event-queue wake fix on the installable GUI branch without changing the
 Windows remapper, F19 mapping, or IOHID injection path.
+
+## 2026-08-03 client GUI permission gate fix
+
+The ad-hoc-signed GUI could remain untrusted by `AXIsProcessTrusted()` even
+after the user removed and re-added `Barrier.app` in Accessibility settings.
+The GUI then stopped at a permission dialog before it could start its bundled
+client, although a secondary-screen client does not require assistive-device
+access. This made the application appear to close repeatedly and left the user
+unsure whether `Barrier`, `barrierc`, or an older helper needed permission.
+
+The legacy process-wide GUI permission gate was removed. The platform check in
+`OSXScreen` remains in place for a primary/server process, where Accessibility
+permission is actually required. After rebuilding and replacing the app, a
+normal LaunchServices start produced exactly one GUI and one bundled client,
+and the client established its connection to `192.168.0.10:24800`.
