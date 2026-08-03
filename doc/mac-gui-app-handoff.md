@@ -302,3 +302,33 @@ arguments:
 
 Report the saved GUI log level and A/B result before changing IOHID, F19,
 compression, keep-alive, or the Windows remapper.
+
+## 2026-08-03 pointer stutter root cause and live fix
+
+The A/B test reproduced the same severe stutter when the bundled `barrierc`
+was run directly with the GUI's exact arguments, INFO log level, root working
+directory, and ordinary IOHID output. The GUI process and its child lifecycle
+were therefore not the cause.
+
+The affected stable branch had split before commits `73a7b33a` and
+`3ca8b0fd`, which previously fixed delayed macOS Carbon wake dispatch and
+coalesced stale wake events. Before those fixes were restored, the direct
+client received 154 to 514 absolute mouse messages per second but forwarded
+only two or three positions per second. The eight-millisecond compression cap
+could not help because macOS woke the Barrier event loop only about once per
+second and then drained each accumulated batch quickly.
+
+The two wake-dispatch commits were applied to this branch as `1572e4a6` and
+`caf7387b`. A rebuilt, ad-hoc-signed arm64 client passed all 152 core tests and
+59 GUI tests. The direct bundled client then connected to
+`192.168.0.10:24800` with SSL disabled and produced these live samples:
+
+```text
+mouse=665 forwarded=169 compressed=653
+mouse=741 forwarded=161 compressed=737
+mouse=421 forwarded=114 compressed=414
+```
+
+The user confirmed that pointer motion was smooth again. This validates the
+macOS event-queue wake fix on the installable GUI branch without changing the
+Windows remapper, F19 mapping, or IOHID injection path.
