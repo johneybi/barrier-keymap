@@ -1,6 +1,15 @@
 name: Build Windows GUI installer
 
 on:
+  push:
+    branches:
+      - stable/v2.4.0-virtual-hid
+    paths:
+      - '.github/workflows/windows-gui-installer.yml'
+      - 'src/gui/**'
+      - 'src/lib/**'
+      - 'dist/inno/**'
+      - 'CMakeLists.txt'
   workflow_dispatch:
 
 jobs:
