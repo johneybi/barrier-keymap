@@ -47,11 +47,13 @@ jobs:
       - name: Configure
         run: |
           qt_prefix=""
+          build_type="Debug"
           if [ "$RUNNER_OS" = "macOS" ]; then
             qt_prefix="$(brew --prefix qt@5)"
+            build_type="Release"
           fi
           cmake -S . -B build \
-            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_BUILD_TYPE="$build_type" \
             -DBARRIER_BUILD_GUI=ON \
             -DBARRIER_BUILD_TESTS=ON \
             -DBARRIER_BUILD_INSTALLER=${{ runner.os == 'macOS' && 'ON' || 'OFF' }} \
