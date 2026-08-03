@@ -100,7 +100,7 @@ class MainWindow : public QMainWindow, public Ui::MainWindowBase
         QString configFilename();
         QString address();
         QString appPath(const QString& name);
-        void open();
+        void open(bool startInBackground = false);
         VersionChecker& versionChecker() { return m_VersionChecker; }
         QString getScreenName();
         ServerConfig& serverConfig() { return m_ServerConfig; }
@@ -172,7 +172,8 @@ public slots:
         void windowStateChanged();
         void updateSSLFingerprint();
         bool launchAtLoginEnabled() const;
-        void setLaunchAtLoginEnabled(bool enabled);
+        bool setLaunchAtLoginEnabled(bool enabled, QString* errorMessage = NULL);
+        bool hasExternalClientProcess() const;
 
     private:
         QSettings& m_Settings;

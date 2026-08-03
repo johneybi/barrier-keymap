@@ -27,6 +27,7 @@
 #include "DataDownloader.h"
 #include "CommandProcess.h"
 #include "FingerprintAcceptDialog.h"
+#include "MacLoginItem.h"
 #include "QUtility.h"
 #include "ProcessorArch.h"
 #include "SslCertificate.h"
@@ -203,11 +204,11 @@ MainWindow::~MainWindow()
     delete m_pLogWindow;
 }
 
-void MainWindow::open()
+void MainWindow::open(bool startInBackground)
 {
     createTrayIcon();
 
-    if (appConfig().getAutoHide()) {
+    if (startInBackground || appConfig().getAutoHide()) {
         hide();
     } else {
         showNormal();
@@ -293,12 +294,14 @@ bool MainWindow::launchAtLoginEnabled() const
         "HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
         QSettings::NativeFormat);
     return startup.contains("Barrier Keymap");
+#elif defined(Q_OS_MAC)
+    return MacLoginItem::isEnabled(QCoreApplication::applicationFilePath());
 #else
     return false;
 #endif
 }
 
-void MainWindow::setLaunchAtLoginEnabled(bool enabled)
+bool MainWindow::setLaunchAtLoginEnabled(bool enabled, QString* errorMessage)
 {
 #if defined(Q_OS_WIN)
     QSettings startup(
@@ -313,14 +316,29 @@ void MainWindow::setLaunchAtLoginEnabled(bool enabled)
         startup.remove("Barrier Keymap");
     }
     startup.sync();
+    return startup.status() == QSettings::NoError;
+#elif defined(Q_OS_MAC)
+    return MacLoginItem::setEnabled(
+        enabled, QCoreApplication::applicationFilePath(), errorMessage);
 #else
     Q_UNUSED(enabled);
+    Q_UNUSED(errorMessage);
+    return false;
 #endif
 }
 
 void MainWindow::setLaunchAtLoginFromTray(bool enabled)
 {
-    setLaunchAtLoginEnabled(enabled);
+    QString errorMessage;
+    if (!setLaunchAtLoginEnabled(enabled, &errorMessage)) {
+        m_pActionLaunchAtLogin->blockSignals(true);
+        m_pActionLaunchAtLogin->setChecked(!enabled);
+        m_pActionLaunchAtLogin->blockSignals(false);
+        QMessageBox::warning(
+            this, tr("Launch at login could not be changed"), errorMessage);
+        return;
+    }
+
     appConfig().setAutoHide(enabled);
     appConfig().setMinimizeToTray(enabled);
     appConfig().setAutoStart(enabled);
@@ -577,6 +595,29 @@ void MainWindow::startBarrier()
     bool desktopMode = appConfig().processMode() == Desktop;
     bool serviceMode = appConfig().processMode() == Service;
 
+    if (desktopMode && barrierProcess()) {
+        if (barrierProcess()->state() != QProcess::NotRunning) {
+            appendLogInfo("barrier process is already running");
+            return;
+        }
+        delete barrierProcess();
+        setBarrierProcess(NULL);
+    }
+
+#if defined(Q_OS_MAC)
+    if (desktopMode && barrier_type() == BarrierType::Client &&
+        !barrierProcess() && hasExternalClientProcess()) {
+        showNormal();
+        QMessageBox::warning(
+            this,
+            tr("Another Barrier client is running"),
+            tr("A barrierc process started outside this application is already "
+               "running. Stop that client before starting Barrier here."));
+        setBarrierState(barrierDisconnected);
+        return;
+    }
+#endif
+
     appendLogDebug("starting process");
     m_ExpectedRunningState = kStarted;
     setBarrierState(barrierConnecting);
@@ -669,6 +710,9 @@ void MainWindow::startBarrier()
         {
             show();
             QMessageBox::warning(this, tr("Program can not be started"), QString(tr("The executable<br><br>%1<br><br>could not be successfully started, although it does exist. Please check if you have sufficient permissions to run this program.").arg(app)));
+            delete barrierProcess();
+            setBarrierProcess(NULL);
+            setBarrierState(barrierDisconnected);
             return;
         }
     }
@@ -678,6 +722,23 @@ void MainWindow::startBarrier()
         QString command(app + " " + args.join(" "));
         m_IpcClient.sendCommand(command, appConfig().elevateMode());
     }
+}
+
+bool MainWindow::hasExternalClientProcess() const
+{
+#if defined(Q_OS_MAC)
+    QProcess process;
+    process.start(QStringLiteral("/usr/bin/pgrep"),
+                  QStringList() << QStringLiteral("-x") << QStringLiteral("barrierc"));
+    if (!process.waitForFinished(1000)) {
+        process.kill();
+        process.waitForFinished();
+        return false;
+    }
+    return process.exitStatus() == QProcess::NormalExit && process.exitCode() == 0;
+#else
+    return false;
+#endif
 }
 
 bool MainWindow::clientArgs(QStringList& args, QString& app)

@@ -29,6 +29,8 @@
 #include <QtGui>
 #include <QSettings>
 #include <QMessageBox>
+#include <QLockFile>
+#include <QStandardPaths>
 
 #if defined(Q_OS_MAC)
 #include <Carbon/Carbon.h>
@@ -73,6 +75,17 @@ int main(int argc, char* argv[])
 
 	QBarrierApplication app(argc, argv);
 
+    const QString runtimeDirectory =
+        QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
+    QDir().mkpath(runtimeDirectory);
+    QLockFile instanceLock(QDir(runtimeDirectory).filePath("barrier-gui.lock"));
+    instanceLock.setStaleLockTime(0);
+    if (!instanceLock.tryLock(100)) {
+        QMessageBox::information(
+            NULL, "Barrier", "Barrier is already running in the menu bar.");
+        return 0;
+    }
+
 #if defined(Q_OS_MAC)
 	if (app.applicationDirPath().startsWith("/Volumes/")) {
         // macOS preferences track applications allowed assistive access by path
@@ -105,6 +118,7 @@ int main(int argc, char* argv[])
 
 	QSettings settings;
 	AppConfig appConfig (&settings);
+    const bool startInBackground = app.arguments().contains("--background");
 
 	if (appConfig.getAutoHide() && !trayAvailable)
 	{
@@ -124,7 +138,7 @@ int main(int argc, char* argv[])
 	}
 	else
 	{
-		mainWindow.open();
+		mainWindow.open(startInBackground);
 	}
 
 	return app.exec();
@@ -174,6 +188,12 @@ bool checkMacAssistiveDevices()
 
 	bool result = AXIsProcessTrustedWithOptions(options);
 	CFRelease(options);
+	if (!result) {
+        QMessageBox::information(
+            NULL, "Barrier needs Accessibility permission",
+            "Allow Barrier in System Settings > Privacy & Security > "
+            "Accessibility, then open Barrier again.");
+    }
 	return result;
 
 #else

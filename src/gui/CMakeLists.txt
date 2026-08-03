@@ -36,6 +36,7 @@ set(GUI_SOURCE_FILES
     src/IpcReader.cpp
     src/KeySequenceWidget.cpp
     src/LogWindow.cpp
+    src/MacLoginItem.cpp
     src/main.cpp
     src/MainWindow.cpp
     src/NewScreenWidget.cpp
@@ -76,6 +77,7 @@ set(GUI_HEADER_FILES
     src/IpcReader.h
     src/KeySequenceWidget.h
     src/LogWindow.h
+    src/MacLoginItem.h
     src/MainWindow.h
     src/NewScreenWidget.h
     src/ProcessorArch.h
@@ -167,6 +169,14 @@ if (BARRIER_BUILD_TESTS)
         test/HotkeyTests.cpp
         test/main.cpp
     )
+
+    if (APPLE)
+        list(APPEND GUI_TEST_SOURCE_FILES
+            test/MacLoginItemTests.cpp
+            src/MacLoginItem.cpp
+            src/MacLoginItem.h
+        )
+    endif()
 
     add_executable(guiunittests
         ${GUI_TEST_SOURCE_FILES}

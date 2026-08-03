@@ -1,23 +1,25 @@
-#!/bin/sh
+#!/bin/bash
 
 # Use the same verbose variable as CMake
 [ "$VERBOSE" = "1" ] && set -x
 
-# Exit on unset variables or pipe errors
-set -uo pipefail
+# Stop before producing a partial application or disk image.
+set -euo pipefail
 
-B_MACOS="Barrier.app/Contents/MacOS"
+B_APP="Barrier.app"
+B_MACOS="$B_APP/Contents/MacOS"
 B_VERSION="@BARRIER_VERSION@"
 B_BINDIR="@CMAKE_RUNTIME_OUTPUT_DIRECTORY@"
 B_BUILDTYPE="@CMAKE_BUILD_TYPE@"
-B_BARRIERC="Barrier.app/Contents/MacOS/barrierc"
-B_BARRIERS="Barrier.app/Contents/MacOS/barriers"
+B_BARRIERC="$B_MACOS/barrierc"
+B_BARRIERS="$B_MACOS/barriers"
+B_DMG="Barrier-$B_VERSION.dmg"
 
-# Colorized output
-info() { tput bold; echo "$@"; tput sgr0 ; }
-error() { tput bold; tput setaf 1; echo "$@"; tput sgr0 ; }
-success() { tput bold; tput setaf 2; echo "$@"; tput sgr0 ; }
-warn() { tput bold; tput setaf 3; echo "$@"; tput sgr0 ; }
+# Keep output readable in both Terminal and headless CI logs.
+info() { printf '%s\n' "$*"; }
+error() { printf 'ERROR: %s\n' "$*" >&2; }
+success() { printf '%s\n' "$*"; }
+warn() { printf 'WARNING: %s\n' "$*"; }
 
 info "Checking for bundle contents"
 if [ ! -d "Barrier.app/Contents" ]; then
@@ -32,11 +34,17 @@ if [ -d "$B_MACOS" ]; then
 fi
 
 info "Copying binaries into bundle"
-# Copy the folder instead of globbing unquoted path
-cp -r "$B_BINDIR" "$B_MACOS" || exit 1
+mkdir -p "$B_MACOS"
+for executable in barrier barrierc barriers; do
+    if [ ! -x "$B_BINDIR/$executable" ]; then
+        error "Missing executable: $B_BINDIR/$executable"
+        exit 1
+    fi
+    cp "$B_BINDIR/$executable" "$B_MACOS/$executable"
+done
 
 # Check for macdeployqt on MacPorts
-if which -s port ; then
+if command -v port >/dev/null 2>&1; then
     info "MacPorts found, searching for macdeployqt"
     DEPLOYQT="$(port contents qt5-qttools | grep --only --max-count 1 '/.*macdeployqt')"
     if [ ! -x "$DEPLOYQT" ]; then
@@ -46,28 +54,42 @@ if which -s port ; then
 fi
 
 # Check for macdeployqt on Homebrew
-if which -s brew ; then
+if command -v brew >/dev/null 2>&1; then
     info "Homebrew found, searching for macdeployqt"
-    DEPLOYQT="$(brew list qt@5 | grep --only '/.*macdeployqt' | head -1)"
+    DEPLOYQT="$(brew --prefix qt@5)/bin/macdeployqt"
     if [ ! -x "$DEPLOYQT" ]; then
         error "Please install package qt"
         exit 1
     fi
 fi
 
-# Use macdeployqt to include libraries and create dmg
+# Use macdeployqt to include all required Qt libraries and plugins.
 if [ "$B_BUILDTYPE" = "Release" ]; then
+    info "Deploying Release bundle"
+    "$DEPLOYQT" "$B_APP" \
+        -executable="$B_BARRIERC" \
+        -executable="$B_BARRIERS" \
+        -always-overwrite
+
+    info "Applying ad-hoc signature"
+    codesign --force --deep --sign - "$B_APP"
+    codesign --verify --deep --strict --verbose=2 "$B_APP"
+
     info "Building Release disk image (dmg)"
-    "$DEPLOYQT" Barrier.app -dmg \
-    -executable="$B_BARRIERC" \
-    -executable="$B_BARRIERS" || exit 1
-    mv "Barrier.dmg" "Barrier-$B_VERSION.dmg" || exit 1
-    success "Created Barrier-$B_VERSION.dmg"
+    staging="$(mktemp -d "${TMPDIR:-/tmp}/barrier-dmg.XXXXXX")"
+    trap 'rm -rf "$staging"' EXIT
+    cp -R "$B_APP" "$staging/"
+    ln -s /Applications "$staging/Applications"
+    rm -f "$B_DMG"
+    hdiutil create -volname "Barrier" -srcfolder "$staging" \
+        -ov -format UDZO "$B_DMG"
+    success "Created $B_DMG"
 else
     warn "Disk image (dmg) only created for Release builds"
     info "Building debug bundle"
-    "$DEPLOYQT" Barrier.app -no-strip \
-    -executable="$B_BARRIERC" \
-    -executable="$B_BARRIERS" || exit 1
+    "$DEPLOYQT" "$B_APP" -no-strip \
+        -executable="$B_BARRIERC" \
+        -executable="$B_BARRIERS" \
+        -always-overwrite
     success "Bundle created successfully"
 fi

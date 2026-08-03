@@ -42,26 +42,41 @@ jobs:
 
       - name: Install macOS dependencies
         if: runner.os == 'macOS'
-        run: brew install openssl
+        run: brew install openssl qt@5
 
       - name: Configure
         run: |
+          qt_prefix=""
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            qt_prefix="$(brew --prefix qt@5)"
+          fi
           cmake -S . -B build \
-            -DBARRIER_BUILD_GUI=${{ runner.os == 'Linux' && 'ON' || 'OFF' }} \
+            -DBARRIER_BUILD_GUI=ON \
             -DBARRIER_BUILD_TESTS=ON \
-            -DBARRIER_BUILD_INSTALLER=OFF \
+            -DBARRIER_BUILD_INSTALLER=${{ runner.os == 'macOS' && 'ON' || 'OFF' }} \
+            -DCMAKE_PREFIX_PATH="$qt_prefix" \
             -DCMAKE_POLICY_VERSION_MINIMUM=3.5
 
       - name: Build
         run: cmake --build build --target barriers unittests --parallel
 
-      - name: Build Linux GUI
-        if: runner.os == 'Linux'
+      - name: Build GUI
         run: cmake --build build --target barrier guiunittests --parallel
+
+      - name: Package macOS application
+        if: runner.os == 'macOS'
+        run: cmake --build build --target Barrier_MacOS --parallel
 
       - name: Test
         run: ./build/bin/unittests
 
-      - name: Test Linux GUI helpers
-        if: runner.os == 'Linux'
+      - name: Test GUI helpers
         run: ./build/bin/guiunittests
+
+      - name: Upload macOS disk image
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Barrier-macOS-${{ runner.arch }}
+          path: build/bundle/Barrier-*.dmg
+          if-no-files-found: error
