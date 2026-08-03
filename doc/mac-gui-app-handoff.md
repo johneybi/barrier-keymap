@@ -347,3 +347,16 @@ The legacy process-wide GUI permission gate was removed. The platform check in
 permission is actually required. After rebuilding and replacing the app, a
 normal LaunchServices start produced exactly one GUI and one bundled client,
 and the client established its connection to `192.168.0.10:24800`.
+
+The first client launched this way then exposed a separate crash loop. Without
+Accessibility permission, the optional secondary-screen Quartz event tap
+returned null. `OSXScreen::enable()` logged the failure but still passed the
+null port to `CFMachPortCreateRunLoopSource`, causing `EXC_BAD_ACCESS` during
+every handshake. The GUI correctly attempted to restart the child, which made
+the client appear to turn off repeatedly.
+
+`OSXScreen::enable()` now stops setting up the optional event-tap run-loop
+source when either CoreGraphics object cannot be created. Remote input output,
+clipboard polling, and the server connection remain active. The rebuilt app
+kept one GUI and one client alive with an established TCP connection and
+created no new crash report during the verification interval.

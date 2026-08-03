@@ -778,11 +778,13 @@ OSXScreen::enable()
 
 	if (!m_eventTapPort) {
 		LOG((CLOG_ERR "failed to create quartz event tap"));
+		return;
 	}
 
 	m_eventTapRLSR = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, m_eventTapPort, 0);
 	if (!m_eventTapRLSR) {
 		LOG((CLOG_ERR "failed to create a CFRunLoopSourceRef for the quartz event tap"));
+		return;
 	}
 
 	CFRunLoopAddSource(CFRunLoopGetCurrent(), m_eventTapRLSR, kCFRunLoopDefaultMode);
