@@ -1,0 +1,115 @@
+name: Build Windows GUI installer
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-2022
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Visual Studio 2017 toolset
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $setup = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\setup.exe"
+          $installPath = & $vswhere -latest -products * -property installationPath
+          if (-not $installPath) {
+            throw "Visual Studio installation was not found"
+          }
+
+          $process = Start-Process -FilePath $setup -Wait -PassThru -ArgumentList @(
+            "modify",
+            "--installPath", "`"$installPath`"",
+            "--add", "Microsoft.VisualStudio.Component.VC.v141.x86.x64",
+            "--quiet",
+            "--norestart",
+            "--nocache"
+          )
+          if ($process.ExitCode -notin 0, 3010) {
+            throw "Visual Studio Installer failed with exit code $($process.ExitCode)"
+          }
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '5.15.2'
+          arch: win64_msvc2019_64
+          cache: true
+
+      - name: Download Bonjour SDK-compatible library
+        shell: pwsh
+        run: .\azure-pipelines\download_install_bonjour_sdk_like.ps1
+
+      - name: Configure release build
+        shell: pwsh
+        env:
+          BONJOUR_SDK_HOME: ${{ github.workspace }}\deps\BonjourSDKLike
+        run: |
+          cmake -S . -B build-windows-gui `
+            -G "Visual Studio 17 2022" `
+            -A x64 `
+            -T v141 `
+            -DBARRIER_BUILD_GUI=ON `
+            -DBARRIER_BUILD_INSTALLER=ON `
+            -DBARRIER_BUILD_TESTS=OFF `
+            -DCMAKE_PREFIX_PATH="$env:QT_ROOT_DIR" `
+            -DDNSSD_LIB="$env:BONJOUR_SDK_HOME\Lib\x64\dnssd.lib" `
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+
+      - name: Build application
+        shell: pwsh
+        run: cmake --build build-windows-gui --config Release --parallel
+
+      - name: Assemble portable application
+        shell: pwsh
+        run: |
+          $releaseDir = "build-windows-gui\bin\Release"
+          & "$env:QT_ROOT_DIR\bin\windeployqt.exe" `
+            --release `
+            --no-translations `
+            --no-compiler-runtime `
+            "$releaseDir\barrier.exe"
+          Copy-Item ext\openssl\windows\x64\bin\*.dll $releaseDir
+          Copy-Item README.md, LICENSE $releaseDir
+
+          New-Item -ItemType Directory -Force -Path dist\windows-gui | Out-Null
+          Copy-Item "$releaseDir\*" dist\windows-gui -Recurse
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --no-progress --yes
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            throw "Inno Setup compiler was not found at $iscc"
+          }
+          & $iscc /Qp build-windows-gui\installer-inno\barrier.iss
+
+      - name: Record binary identity
+        shell: pwsh
+        run: |
+          Get-FileHash build-windows-gui\bin\Release\barrier.exe -Algorithm SHA256
+          Get-ChildItem build-windows-gui\installer-inno\bin\*.exe | ForEach-Object {
+            Get-FileHash $_.FullName -Algorithm SHA256
+          }
+
+      - name: Upload portable application
+        uses: actions/upload-artifact@v4
+        with:
+          name: barrier-keymap-windows-portable
+          path: dist/windows-gui
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: barrier-keymap-windows-installer
+          path: build-windows-gui/installer-inno/bin/*.exe
