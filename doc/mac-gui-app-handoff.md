@@ -139,3 +139,71 @@ them. Update this document or add a short test report containing:
 
 Do not commit local certificates, signing identities, provisioning data,
 private logs, or user-specific LaunchAgent files.
+
+## 2026-08-03 local beta build report
+
+Implementation commit: `ba8de12d` (`Build installable macOS GUI client`)
+
+Build environment:
+
+- macOS 26.5 (build 25F71), Apple Silicon arm64;
+- Apple clang 21.0.0;
+- CMake 4.3.2;
+- Qt 5.15.19 from Homebrew;
+- Command Line Tools SDK, without the full Xcode application.
+
+Implemented GUI behavior:
+
+- the GUI, client, and server executables are bundled together, and the GUI
+  resolves `barrierc` from its own `Contents/MacOS` directory;
+- a per-user LaunchAgent at
+  `~/Library/LaunchAgents/org.barrier-foss.barrier-keymap.plist` launches the
+  installed app executable with `--background`;
+- the login action also enables hidden startup, menu-bar operation, and
+  automatic client start through the existing saved settings;
+- a `QLockFile` prevents duplicate GUI instances;
+- an existing independently launched `barrierc` is reported before the GUI
+  starts another client;
+- a stopped child process is deleted before automatic restart, preventing
+  stale process objects from accumulating;
+- missing Accessibility permission produces a visible instruction and the app
+  exits until the user grants permission;
+- macOS CI now builds the Qt GUI, runs GUI tests, creates a signed app bundle,
+  and uploads the DMG artifact.
+
+Local artifacts:
+
+```text
+/private/tmp/barrier-mac-gui-build/bundle/Barrier.app
+/private/tmp/barrier-mac-gui-build/bundle/Barrier-2.4.0-release.dmg
+```
+
+SHA-256:
+
+```text
+GUI executable:
+0898bf3a77415854b336a4669f0145e73f30059fe26c833001435afffbdcc72d
+
+barrierc executable:
+4665d89dc54f24fbf398dbbca895cd4b3f6473d3e65ad0b25cfa401c62db05c7
+
+DMG:
+0b7a7c29c229395a646caec47f9e67b3fbc433086126e9aae9a19d4fb6d1c722
+```
+
+Verification completed:
+
+- 152 core unit tests passed;
+- 59 GUI unit tests passed, including LaunchAgent write/read/remove coverage;
+- `codesign --verify --deep --strict` passed;
+- the bundle contains only `barrier`, `barrierc`, and `barriers` in
+  `Contents/MacOS`;
+- the main executables are arm64 and no longer reference Homebrew Qt paths;
+- the bundle is ad-hoc signed and is not notarized.
+
+Physical acceptance testing is still pending. Process counts, permission
+state, connection and reconnection, pointer smoothness, F19 input-source
+toggle, clipboard shortcuts, Print Screen, Korean composition across apps,
+and extra mouse buttons must be checked after installing the app in
+`/Applications`. Because this beta is not Developer ID signed or notarized,
+the first launch may require Finder's Open command or removal of quarantine.
