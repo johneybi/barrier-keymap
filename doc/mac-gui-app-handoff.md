@@ -256,3 +256,49 @@ lifecycle on the physical Mac:
 
 Commit the diagnosis and fix to the same branch, including the minimal INFO
 log lines and the physical re-test result.
+
+## 2026-08-03 severe pointer stutter after GUI reconnect
+
+A later GUI client session stayed connected long enough to enter the Mac, but
+the remote pointer appeared to update at roughly one frame per second. The
+Windows INFO log rules out server capture and TCP backpressure during the
+affected interval:
+
+```text
+13:36:21 switch to ESKui-MacBookPro
+13:36:22 634 writes, 8068 bytes, pending 4 bytes
+13:36:23 469 writes, 5648 bytes, pending 12 bytes
+13:36:24 587 writes, 7044 bytes, pending 4 bytes
+13:36:25 412 writes, 4944 bytes, pending 4 bytes
+13:36:26 313 writes, 3752 bytes, pending 4 bytes
+13:36:27 434 writes, 5220 bytes, pending 4 bytes
+13:36:28 627 writes, 7572 bytes, pending 4 bytes
+13:36:29 874 writes, 10508 bytes, pending 4 bytes
+13:36:30 switch back to DESKTOP-BJNR3KH
+```
+
+The Windows server used INFO logging and consumed only about 0.016 CPU seconds
+over a five-second sample. It was sending hundreds of writes per second with
+negligible pending data. Investigate the macOS receive/event-injection path,
+not Windows event generation.
+
+First, inspect the Mac GUI's saved log level. Old Barrier GUI settings may be
+reused by the beta. Set the client to INFO, disable file/event-volume logging,
+stop it completely, and start it once. DEBUG1/DEBUG2 are prohibited for the
+usability test because per-event logging previously caused the same severe
+stutter.
+
+If INFO still stutters, perform an A/B test using the exact bundled
+`/Applications/Barrier.app/Contents/MacOS/barrierc` binary and identical
+arguments:
+
+1. run it once as the GUI child and record its exact command, environment,
+   working directory, log level, and process CPU;
+2. quit the GUI completely and run that same bundled client directly;
+3. compare pointer smoothness and Mac-side receive/injection timing;
+4. identify whether the regression follows the binary or only the GUI parent;
+5. do not enable DEBUG1 during the movement interval; use bounded counters or
+   sampling instead.
+
+Report the saved GUI log level and A/B result before changing IOHID, F19,
+compression, keep-alive, or the Windows remapper.
