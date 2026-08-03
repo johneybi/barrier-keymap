@@ -132,6 +132,8 @@ public slots:
         void logError();
         void bonjourInstallFinished();
         void showLogWindow();
+        void setAutoConnectFromTray(bool enabled);
+        void setLaunchAtLoginFromTray(bool enabled);
 
     protected:
         QSettings& settings() { return m_Settings; }
@@ -169,6 +171,8 @@ public slots:
         void proofreadInfo();
         void windowStateChanged();
         void updateSSLFingerprint();
+        bool launchAtLoginEnabled() const;
+        void setLaunchAtLoginEnabled(bool enabled);
 
     private:
         QSettings& m_Settings;
@@ -179,6 +183,8 @@ public slots:
         QTemporaryFile* m_pTempConfigFile;
         QSystemTrayIcon* m_pTrayIcon;
         QMenu* m_pTrayIconMenu;
+        QAction* m_pActionAutoConnect;
+        QAction* m_pActionLaunchAtLogin;
         bool m_AlreadyHidden;
         VersionChecker m_VersionChecker;
         IpcClient m_IpcClient;

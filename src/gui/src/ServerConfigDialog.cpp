@@ -24,6 +24,18 @@
 #include <QtCore>
 #include <QtGui>
 #include <QMessageBox>
+#include <QComboBox>
+#include <QHeaderView>
+#include <QHBoxLayout>
+#include <QInputDialog>
+#include <QLabel>
+#include <QPushButton>
+#include <QSet>
+#include <QTableWidget>
+#include <QVBoxLayout>
+
+#include <algorithm>
+#include <functional>
 
 ServerConfigDialog::ServerConfigDialog(QWidget* parent, ServerConfig& config, const QString& defaultScreenName) :
     QDialog(parent, Qt::WindowTitleHint | Qt::WindowSystemMenuHint),
@@ -31,7 +43,12 @@ ServerConfigDialog::ServerConfigDialog(QWidget* parent, ServerConfig& config, co
     m_OrigServerConfig(config),
     m_ServerConfig(config),
     m_ScreenSetupModel(serverConfig().screens(), serverConfig().numColumns(), serverConfig().numRows()),
-    m_Message("")
+    m_Message(""),
+    m_DefaultScreenName(defaultScreenName),
+    m_pKeyMappingsTable(NULL),
+    m_pAddKeyMappingButton(NULL),
+    m_pRemoveKeyMappingButton(NULL),
+    m_pWindowsMacPresetButton(NULL)
 {
     setupUi(this);
 
@@ -68,6 +85,219 @@ ServerConfigDialog::ServerConfigDialog(QWidget* parent, ServerConfig& config, co
 
     if (serverConfig().numScreens() == 0)
         model().screen(serverConfig().numColumns() / 2, serverConfig().numRows() / 2) = Screen(defaultScreenName);
+
+    initializeKeyMappingsTab();
+}
+
+void ServerConfigDialog::initializeKeyMappingsTab()
+{
+    QWidget* tab = new QWidget(m_pTabWidget);
+    QVBoxLayout* layout = new QVBoxLayout(tab);
+
+    QLabel* description = new QLabel(
+        tr("Mappings apply only while controlling the selected screen."), tab);
+    description->setWordWrap(true);
+    layout->addWidget(description);
+
+    m_pKeyMappingsTable = new QTableWidget(0, 4, tab);
+    m_pKeyMappingsTable->setHorizontalHeaderLabels(QStringList()
+        << tr("Target screen") << tr("Input") << tr("Behavior") << tr("Output"));
+    m_pKeyMappingsTable->setSelectionBehavior(QAbstractItemView::SelectRows);
+    m_pKeyMappingsTable->setSelectionMode(QAbstractItemView::ExtendedSelection);
+    m_pKeyMappingsTable->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+    m_pKeyMappingsTable->verticalHeader()->setVisible(false);
+    layout->addWidget(m_pKeyMappingsTable);
+
+    QHBoxLayout* buttons = new QHBoxLayout();
+    m_pAddKeyMappingButton = new QPushButton(tr("Add mapping"), tab);
+    m_pRemoveKeyMappingButton = new QPushButton(tr("Remove"), tab);
+    m_pWindowsMacPresetButton = new QPushButton(tr("Windows to Mac preset"), tab);
+    buttons->addWidget(m_pAddKeyMappingButton);
+    buttons->addWidget(m_pRemoveKeyMappingButton);
+    buttons->addStretch();
+    buttons->addWidget(m_pWindowsMacPresetButton);
+    layout->addLayout(buttons);
+
+    connect(m_pAddKeyMappingButton, &QPushButton::clicked,
+            this, &ServerConfigDialog::addKeyMapping);
+    connect(m_pRemoveKeyMappingButton, &QPushButton::clicked,
+            this, &ServerConfigDialog::removeSelectedKeyMappings);
+    connect(m_pWindowsMacPresetButton, &QPushButton::clicked,
+            this, &ServerConfigDialog::addWindowsMacPreset);
+
+    for (const KeyMapping& mapping : serverConfig().keyMappings()) {
+        addKeyMappingRow(mapping);
+    }
+
+    m_pTabWidget->addTab(tab, tr("Key mappings"));
+}
+
+QStringList ServerConfigDialog::clientScreenNames() const
+{
+    QStringList names;
+    for (const Screen& screen : m_ServerConfig.screens()) {
+        if (!screen.isNull() && screen.name() != m_DefaultScreenName) {
+            names << screen.name();
+        }
+    }
+    return names;
+}
+
+void ServerConfigDialog::addKeyMappingRow(const KeyMapping& mapping)
+{
+    const int row = m_pKeyMappingsTable->rowCount();
+    m_pKeyMappingsTable->insertRow(row);
+
+    QComboBox* screen = new QComboBox(m_pKeyMappingsTable);
+    QStringList screenNames;
+    for (const Screen& candidate : serverConfig().screens()) {
+        if (!candidate.isNull()) {
+            screenNames << candidate.name();
+        }
+    }
+    screen->addItems(screenNames);
+    int screenIndex = screen->findText(mapping.screen);
+    if (screenIndex >= 0) {
+        screen->setCurrentIndex(screenIndex);
+    }
+    m_pKeyMappingsTable->setCellWidget(row, 0, screen);
+
+    m_pKeyMappingsTable->setItem(row, 1, new QTableWidgetItem(mapping.input));
+
+    QComboBox* mode = new QComboBox(m_pKeyMappingsTable);
+    mode->addItem(tr("Direct"), "direct");
+    mode->addItem(tr("Tap"), "tap");
+    mode->addItem(tr("Hold"), "hold");
+    int modeIndex = mode->findData(mapping.mode.isEmpty() ? "direct" : mapping.mode);
+    mode->setCurrentIndex(modeIndex < 0 ? 0 : modeIndex);
+    m_pKeyMappingsTable->setCellWidget(row, 2, mode);
+
+    m_pKeyMappingsTable->setItem(row, 3, new QTableWidgetItem(mapping.output));
+}
+
+void ServerConfigDialog::addKeyMapping()
+{
+    KeyMapping mapping;
+    QStringList clients = clientScreenNames();
+    mapping.screen = clients.isEmpty() ? m_DefaultScreenName : clients.first();
+    mapping.mode = "direct";
+    addKeyMappingRow(mapping);
+    m_pKeyMappingsTable->setCurrentCell(m_pKeyMappingsTable->rowCount() - 1, 1);
+    m_pKeyMappingsTable->editItem(m_pKeyMappingsTable->currentItem());
+}
+
+void ServerConfigDialog::removeSelectedKeyMappings()
+{
+    QSet<int> rows;
+    for (QTableWidgetItem* item : m_pKeyMappingsTable->selectedItems()) {
+        rows.insert(item->row());
+    }
+    QList<int> sorted = rows.values();
+    std::sort(sorted.begin(), sorted.end(), std::greater<int>());
+    for (int row : sorted) {
+        m_pKeyMappingsTable->removeRow(row);
+    }
+}
+
+bool ServerConfigDialog::hasKeyMapping(const KeyMapping& mapping) const
+{
+    for (int row = 0; row < m_pKeyMappingsTable->rowCount(); ++row) {
+        QComboBox* screen = qobject_cast<QComboBox*>(m_pKeyMappingsTable->cellWidget(row, 0));
+        QComboBox* mode = qobject_cast<QComboBox*>(m_pKeyMappingsTable->cellWidget(row, 2));
+        QTableWidgetItem* input = m_pKeyMappingsTable->item(row, 1);
+        if (screen != NULL && mode != NULL && input != NULL &&
+            screen->currentText() == mapping.screen &&
+            input->text().trimmed().compare(mapping.input, Qt::CaseInsensitive) == 0 &&
+            mode->currentData().toString() == mapping.mode) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void ServerConfigDialog::addWindowsMacPreset()
+{
+    QStringList clients = clientScreenNames();
+    if (clients.isEmpty()) {
+        QMessageBox::information(this, tr("Key mappings"),
+            tr("Add the Mac client screen before applying the preset."));
+        return;
+    }
+
+    bool ok = true;
+    QString target = clients.size() == 1 ? clients.first() :
+        QInputDialog::getItem(this, tr("Windows to Mac preset"),
+            tr("Target screen:"), clients, 0, false, &ok);
+    if (!ok || target.isEmpty()) {
+        return;
+    }
+
+    const KeyMapping preset[] = {
+        { target, "right_alt", "tap", "F19" },
+        { target, "right_alt", "hold", "right_super" },
+        { target, "hangul", "tap", "F19" },
+        { target, "hangul", "hold", "right_super" },
+        { target, "control+c", "direct", "command+c" },
+        { target, "control+v", "direct", "command+v" },
+        { target, "print_screen", "direct", "command+shift+4" }
+    };
+
+    for (const KeyMapping& mapping : preset) {
+        if (!hasKeyMapping(mapping)) {
+            addKeyMappingRow(mapping);
+        }
+    }
+}
+
+bool ServerConfigDialog::saveKeyMappings()
+{
+    std::vector<KeyMapping> mappings;
+    QSet<QString> exactRules;
+    QSet<QString> directRules;
+    QSet<QString> tapHoldRules;
+
+    for (int row = 0; row < m_pKeyMappingsTable->rowCount(); ++row) {
+        QComboBox* screen = qobject_cast<QComboBox*>(m_pKeyMappingsTable->cellWidget(row, 0));
+        QComboBox* mode = qobject_cast<QComboBox*>(m_pKeyMappingsTable->cellWidget(row, 2));
+        QTableWidgetItem* input = m_pKeyMappingsTable->item(row, 1);
+        QTableWidgetItem* output = m_pKeyMappingsTable->item(row, 3);
+
+        KeyMapping mapping;
+        mapping.screen = screen == NULL ? QString() : screen->currentText().trimmed();
+        mapping.input = input == NULL ? QString() : input->text().trimmed();
+        mapping.mode = mode == NULL ? QString("direct") : mode->currentData().toString();
+        mapping.output = output == NULL ? QString() : output->text().trimmed();
+
+        if (mapping.screen.isEmpty() || mapping.input.isEmpty() || mapping.output.isEmpty()) {
+            QMessageBox::warning(this, tr("Invalid key mapping"),
+                tr("Every mapping needs a target screen, input, and output."));
+            m_pTabWidget->setCurrentWidget(m_pKeyMappingsTable->parentWidget());
+            return false;
+        }
+
+        const QString base = mapping.screen.toLower() + "\n" + mapping.input.toLower();
+        const QString exact = base + "\n" + mapping.mode;
+        if (exactRules.contains(exact) ||
+            (mapping.mode == "direct" && tapHoldRules.contains(base)) ||
+            (mapping.mode != "direct" && directRules.contains(base))) {
+            QMessageBox::warning(this, tr("Duplicate key mapping"),
+                tr("The input '%1' has conflicting mappings for '%2'.")
+                    .arg(mapping.input, mapping.screen));
+            return false;
+        }
+
+        exactRules.insert(exact);
+        if (mapping.mode == "direct") {
+            directRules.insert(base);
+        }
+        else {
+            tapHoldRules.insert(base);
+        }
+        mappings.push_back(mapping);
+    }
+
+    serverConfig().setKeyMappings(mappings);
+    return true;
 }
 
 void ServerConfigDialog::showEvent(QShowEvent* event)
@@ -83,6 +313,10 @@ void ServerConfigDialog::showEvent(QShowEvent* event)
 
 void ServerConfigDialog::accept()
 {
+    if (!saveKeyMappings()) {
+        return;
+    }
+
     serverConfig().haveHeartbeat(m_pCheckBoxHeartbeat->isChecked());
     serverConfig().setHeartbeat(m_pSpinBoxHeartbeat->value());
 

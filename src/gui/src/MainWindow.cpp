@@ -105,6 +105,8 @@ MainWindow::MainWindow(QSettings& settings, AppConfig& appConfig) :
     m_pTempConfigFile(NULL),
     m_pTrayIcon(NULL),
     m_pTrayIconMenu(NULL),
+    m_pActionAutoConnect(NULL),
+    m_pActionLaunchAtLogin(NULL),
     m_AlreadyHidden(false),
     m_pMenuBar(NULL),
     m_pMenuBarrier(NULL),
@@ -234,8 +236,22 @@ void MainWindow::createTrayIcon()
 {
     m_pTrayIconMenu = new QMenu(this);
 
+    m_pActionAutoConnect = new QAction(tr("Auto connect"), this);
+    m_pActionAutoConnect->setCheckable(true);
+    m_pActionAutoConnect->setChecked(appConfig().autoConfig());
+    connect(m_pActionAutoConnect, &QAction::toggled,
+            this, &MainWindow::setAutoConnectFromTray);
+
+    m_pActionLaunchAtLogin = new QAction(tr("Launch in background at login"), this);
+    m_pActionLaunchAtLogin->setCheckable(true);
+    m_pActionLaunchAtLogin->setChecked(launchAtLoginEnabled());
+    connect(m_pActionLaunchAtLogin, &QAction::toggled,
+            this, &MainWindow::setLaunchAtLoginFromTray);
+
     m_pTrayIconMenu->addAction(m_pActionStartBarrier);
     m_pTrayIconMenu->addAction(m_pActionStopBarrier);
+    m_pTrayIconMenu->addAction(m_pActionAutoConnect);
+    m_pTrayIconMenu->addAction(m_pActionLaunchAtLogin);
     m_pTrayIconMenu->addAction(m_pActionShowLog);
     m_pTrayIconMenu->addSeparator();
 
@@ -254,6 +270,64 @@ void MainWindow::createTrayIcon()
     setIcon(barrierDisconnected);
 
     m_pTrayIcon->show();
+}
+
+void MainWindow::setAutoConnectFromTray(bool enabled)
+{
+    m_SuppressAutoConfigWarning = true;
+    m_pCheckBoxAutoConfig->setChecked(enabled);
+    m_SuppressAutoConfigWarning = false;
+
+    if (m_pActionAutoConnect->isChecked() != m_pCheckBoxAutoConfig->isChecked()) {
+        m_pActionAutoConnect->blockSignals(true);
+        m_pActionAutoConnect->setChecked(m_pCheckBoxAutoConfig->isChecked());
+        m_pActionAutoConnect->blockSignals(false);
+    }
+    appConfig().saveSettings();
+}
+
+bool MainWindow::launchAtLoginEnabled() const
+{
+#if defined(Q_OS_WIN)
+    QSettings startup(
+        "HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
+        QSettings::NativeFormat);
+    return startup.contains("Barrier Keymap");
+#else
+    return false;
+#endif
+}
+
+void MainWindow::setLaunchAtLoginEnabled(bool enabled)
+{
+#if defined(Q_OS_WIN)
+    QSettings startup(
+        "HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
+        QSettings::NativeFormat);
+    if (enabled) {
+        const QString command = QString("\"%1\"")
+            .arg(QDir::toNativeSeparators(QCoreApplication::applicationFilePath()));
+        startup.setValue("Barrier Keymap", command);
+    }
+    else {
+        startup.remove("Barrier Keymap");
+    }
+    startup.sync();
+#else
+    Q_UNUSED(enabled);
+#endif
+}
+
+void MainWindow::setLaunchAtLoginFromTray(bool enabled)
+{
+    setLaunchAtLoginEnabled(enabled);
+    appConfig().setAutoHide(enabled);
+    appConfig().setMinimizeToTray(enabled);
+    appConfig().setAutoStart(enabled);
+    if (enabled) {
+        appConfig().setStartedBefore(true);
+    }
+    appConfig().saveSettings();
 }
 
 void MainWindow::retranslateMenuBar()
@@ -1346,6 +1420,13 @@ void MainWindow::on_m_pCheckBoxAutoConfig_toggled(bool checked)
     m_pLineEditHostname->setDisabled(checked);
     appConfig().setAutoConfig(checked);
     updateZeroconfService();
+
+    if (m_pActionAutoConnect != NULL && m_pActionAutoConnect->isChecked() != checked) {
+        m_pActionAutoConnect->blockSignals(true);
+        m_pActionAutoConnect->setChecked(checked);
+        m_pActionAutoConnect->blockSignals(false);
+    }
+    appConfig().saveSettings();
 
     if (!checked) {
         m_pComboServerList->clear();

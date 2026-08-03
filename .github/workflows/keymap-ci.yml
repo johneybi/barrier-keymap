@@ -37,7 +37,8 @@ jobs:
             libxinerama-dev \
             libxrandr-dev \
             libxtst-dev \
-            pkg-config
+            pkg-config \
+            qtbase5-dev
 
       - name: Install macOS dependencies
         if: runner.os == 'macOS'
@@ -46,7 +47,7 @@ jobs:
       - name: Configure
         run: |
           cmake -S . -B build \
-            -DBARRIER_BUILD_GUI=OFF \
+            -DBARRIER_BUILD_GUI=${{ runner.os == 'Linux' && 'ON' || 'OFF' }} \
             -DBARRIER_BUILD_TESTS=ON \
             -DBARRIER_BUILD_INSTALLER=OFF \
             -DCMAKE_POLICY_VERSION_MINIMUM=3.5
@@ -54,5 +55,13 @@ jobs:
       - name: Build
         run: cmake --build build --target barriers unittests --parallel
 
+      - name: Build Linux GUI
+        if: runner.os == 'Linux'
+        run: cmake --build build --target barrier guiunittests --parallel
+
       - name: Test
         run: ./build/bin/unittests
+
+      - name: Test Linux GUI helpers
+        if: runner.os == 'Linux'
+        run: ./build/bin/guiunittests

@@ -27,6 +27,9 @@
 
 #include <QDialog>
 
+class QPushButton;
+class QTableWidget;
+
 class ServerConfigDialog : public QDialog, public Ui::ServerConfigDialogBase
 {
     Q_OBJECT
@@ -40,6 +43,9 @@ class ServerConfigDialog : public QDialog, public Ui::ServerConfigDialogBase
         void message(const QString& message) { m_Message = message; }
 
     protected slots:
+        void addKeyMapping();
+        void removeSelectedKeyMappings();
+        void addWindowsMacPreset();
         void on_m_pButtonNewHotkey_clicked();
         void on_m_pListHotkeys_itemSelectionChanged();
         void on_m_pButtonEditHotkey_clicked();
@@ -56,10 +62,22 @@ class ServerConfigDialog : public QDialog, public Ui::ServerConfigDialogBase
         ScreenSetupModel& model() { return m_ScreenSetupModel; }
 
     private:
+        void initializeKeyMappingsTab();
+        void addKeyMappingRow(const KeyMapping& mapping);
+        bool saveKeyMappings();
+        QStringList clientScreenNames() const;
+        bool hasKeyMapping(const KeyMapping& mapping) const;
+
+    private:
         ServerConfig& m_OrigServerConfig;
         ServerConfig m_ServerConfig;
         ScreenSetupModel m_ScreenSetupModel;
         QString m_Message;
+        QString m_DefaultScreenName;
+        QTableWidget* m_pKeyMappingsTable;
+        QPushButton* m_pAddKeyMappingButton;
+        QPushButton* m_pRemoveKeyMappingButton;
+        QPushButton* m_pWindowsMacPresetButton;
 };
 
 #endif

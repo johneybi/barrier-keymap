@@ -21,6 +21,7 @@
 #define SERVERCONFIG__H
 
 #include <QList>
+#include <QString>
 
 #include "Screen.h"
 #include "BaseConfig.h"
@@ -32,6 +33,16 @@ class QString;
 class QFile;
 class ServerConfigDialog;
 class MainWindow;
+
+struct KeyMapping
+{
+    QString screen;
+    QString input;
+    QString mode;
+    QString output;
+
+    QString configInput() const;
+};
 
 class ServerConfig : public BaseConfig
 {
@@ -60,6 +71,8 @@ class ServerConfig : public BaseConfig
         int switchCornerSize() const { return m_SwitchCornerSize; }
         const QList<bool>& switchCorners() const { return m_SwitchCorners; }
         const std::vector<Hotkey>& hotkeys() const { return m_Hotkeys; }
+        const std::vector<KeyMapping>& keyMappings() const { return m_KeyMappings; }
+        void setKeyMappings(const std::vector<KeyMapping>& mappings) { m_KeyMappings = mappings; }
         bool ignoreAutoConfigClient() const { return m_IgnoreAutoConfigClient; }
         bool enableDragAndDrop() const { return m_EnableDragAndDrop; }
         bool clipboardSharing() const { return m_ClipboardSharing; }
@@ -94,6 +107,7 @@ class ServerConfig : public BaseConfig
         void setClipboardSharing(bool on) { m_ClipboardSharing = on; }
         QList<bool>& switchCorners() { return m_SwitchCorners; }
         std::vector<Hotkey>& hotkeys() { return m_Hotkeys; }
+        std::vector<KeyMapping>& keyMappings() { return m_KeyMappings; }
 
         void init();
         int adjacentScreenIndex(int idx, int deltaColumn, int deltaRow) const;
@@ -121,6 +135,7 @@ class ServerConfig : public BaseConfig
         int m_SwitchCornerSize;
         QList<bool> m_SwitchCorners;
         std::vector<Hotkey> m_Hotkeys;
+        std::vector<KeyMapping> m_KeyMappings;
         QString m_ServerName;
         bool m_IgnoreAutoConfigClient;
         bool m_EnableDragAndDrop;

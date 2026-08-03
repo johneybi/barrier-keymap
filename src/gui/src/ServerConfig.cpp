@@ -42,6 +42,17 @@ static const struct
 
 const int serverDefaultIndex = 7;
 
+QString KeyMapping::configInput() const
+{
+    if (mode == "tap") {
+        return input + ".alone";
+    }
+    if (mode == "hold") {
+        return input + ".hold";
+    }
+    return input;
+}
+
 ServerConfig::ServerConfig(QSettings* settings, int numColumns, int numRows ,
                 QString serverName, MainWindow* mainWindow) :
     m_pSettings(settings),
@@ -138,6 +149,17 @@ void ServerConfig::saveSettings()
     }
     settings().endArray();
 
+    settings().beginWriteArray("keyMappings");
+    for (int i = 0; i < keyMappings().size(); i++)
+    {
+        settings().setArrayIndex(i);
+        settings().setValue("screen", keyMappings()[i].screen);
+        settings().setValue("input", keyMappings()[i].input);
+        settings().setValue("mode", keyMappings()[i].mode);
+        settings().setValue("output", keyMappings()[i].output);
+    }
+    settings().endArray();
+
     settings().endGroup();
 }
 
@@ -184,6 +206,22 @@ void ServerConfig::loadSettings()
         Hotkey h;
         h.loadSettings(settings());
         hotkeys().push_back(h);
+    }
+    settings().endArray();
+
+    int numKeyMappings = settings().beginReadArray("keyMappings");
+    for (int i = 0; i < numKeyMappings; i++)
+    {
+        settings().setArrayIndex(i);
+        KeyMapping mapping;
+        mapping.screen = settings().value("screen").toString();
+        mapping.input = settings().value("input").toString();
+        mapping.mode = settings().value("mode", "direct").toString();
+        mapping.output = settings().value("output").toString();
+        if (!mapping.screen.isEmpty() && !mapping.input.isEmpty() &&
+            !mapping.output.isEmpty()) {
+            keyMappings().push_back(mapping);
+        }
     }
     settings().endArray();
 
@@ -244,6 +282,29 @@ QTextStream& operator<<(QTextStream& outStream, const ServerConfig& config)
         }
 
     outStream << "end" << endl << endl;
+
+    if (!config.keyMappings().empty()) {
+        outStream << "section: remaps" << endl;
+        for (const Screen& screen : config.screens()) {
+            if (screen.isNull()) {
+                continue;
+            }
+
+            bool wroteScreen = false;
+            for (const KeyMapping& mapping : config.keyMappings()) {
+                if (mapping.screen != screen.name()) {
+                    continue;
+                }
+                if (!wroteScreen) {
+                    outStream << "\t" << screen.name() << ":" << endl;
+                    wroteScreen = true;
+                }
+                outStream << "\t\t" << mapping.configInput()
+                          << " = " << mapping.output << endl;
+            }
+        }
+        outStream << "end" << endl << endl;
+    }
 
     outStream << "section: options" << endl;
 
