@@ -207,3 +207,52 @@ toggle, clipboard shortcuts, Print Screen, Korean composition across apps,
 and extra mouse buttons must be checked after installing the app in
 `/Applications`. Because this beta is not Developer ID signed or notarized,
 the first launch may require Finder's Open command or removal of quarantine.
+
+## 2026-08-03 first physical GUI connection failure
+
+The first physical test of the macOS GUI beta did not produce a usable client
+session. The Windows server remained healthy and listening on
+`192.168.0.10:24800`, but its INFO log recorded this sequence:
+
+```text
+13:33:06-13:33:19 client "ESKui-MacBookPro" repeatedly connected and disconnected
+13:33:20 client "ESKui-MacBookPro" connected
+13:33:23/26 small TCP output writes succeeded
+13:33:29 client "ESKui-MacBookPro" is dead
+```
+
+After that, Windows showed only a stale `FIN_WAIT_2` connection and the mouse
+could not cross to the Mac. This is not a Windows screen-layout failure: there
+was no live client to enter.
+
+The Mac GUI initially inherited SSL enabled while the coordinated Windows
+server uses SSL disabled. The user disabled SSL, after which the protocol
+handshake reached `client has connected`, but the bundled client still exited
+or stopped responding within seconds. Commit `51831f83` changes the first-run
+GUI default to SSL disabled, but existing saved settings must still be changed
+manually once.
+
+Before changing protocol or input code, diagnose the macOS GUI process
+lifecycle on the physical Mac:
+
+1. Confirm there is exactly one GUI and one `barrierc`, and record both PIDs.
+2. Confirm the GUI launches `/Applications/Barrier.app/Contents/MacOS/barrierc`
+   rather than an older command-line build.
+3. Capture the GUI Show Log output and the complete bundled `barrierc` INFO
+   output from process start through disconnect.
+4. Record the child exit code/signal and whether the GUI immediately restarts
+   it.
+5. Check macOS crash reports and Accessibility/Input Monitoring permission for
+   the installed app and bundled client.
+6. Disable launch at login temporarily and stop every old command-line client
+   before one foreground GUI test.
+7. Re-test with screen name `ESKui-MacBookPro`, server `192.168.0.10`, port
+   `24800`, SSL off, and auto-config off so only the explicit server address is
+   used.
+8. Compare the exact GUI-generated `barrierc` command line with the last proven
+   command-line invocation. First fix any argument, environment, working
+   directory, or restart-policy difference; do not alter the proven F19/IOHID
+   path to address this lifecycle failure.
+
+Commit the diagnosis and fix to the same branch, including the minimal INFO
+log lines and the physical re-test result.
