@@ -54,9 +54,6 @@ Name: "{commondesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: 
 ; to avoid duplicate entries remove the existing rule (fails if it doesn't exist) before adding
 Filename: {sys}\netsh.exe; Parameters: "advfirewall firewall delete rule name=""{#MyAppListenerDesc}"""; Flags: runhidden
 Filename: {sys}\netsh.exe; Parameters: "advfirewall firewall add rule name=""{#MyAppListenerDesc}"" protocol=TCP dir=in localport=24800 action=allow"; Flags: runhidden
-Filename: {sys}\sc.exe; Parameters: "create {#MyAppServiceName} start= auto binPath= ""\""{app}\{#MyAppServiceExe}\"""""; Flags: runhidden
-Filename: {sys}\sc.exe; Parameters: "description {#MyAppServiceName} ""{#MyAppServiceDesc}"""; Flags: runhidden
-Filename: {sys}\sc.exe; Parameters: "start {#MyAppServiceName}"; Flags: runhidden
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
 
 [UninstallDelete]
@@ -64,8 +61,6 @@ Type: filesandordirs; Name: "{commonappdata}\Barrier"
 
 [UninstallRun]
 Filename: {sys}\taskkill; Parameters: "/im {#MyAppExeName} /f /t"; Flags: runhidden
-Filename: {sys}\net.exe; Parameters: "stop {#MyAppServiceName}"; Flags: runhidden
-Filename: {sys}\sc.exe; Parameters: "delete {#MyAppServiceName}"; Flags: runhidden
 Filename: {sys}\netsh.exe; Parameters: "advfirewall firewall delete rule name=""{#MyAppListenerDesc}"""; Flags: runhidden
 
 [CustomMessages]

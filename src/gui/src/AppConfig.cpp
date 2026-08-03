@@ -26,7 +26,7 @@
 const char AppConfig::m_BarriersName[] = "barriers.exe";
 const char AppConfig::m_BarriercName[] = "barrierc.exe";
 const char AppConfig::m_BarrierLogDir[] = "log/";
-#define DEFAULT_PROCESS_MODE Service
+#define DEFAULT_PROCESS_MODE Desktop
 #else
 const char AppConfig::m_BarriersName[] = "barriers";
 const char AppConfig::m_BarriercName[] = "barrierc";
