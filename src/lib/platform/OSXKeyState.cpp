@@ -81,7 +81,7 @@ static const KeyEntry    s_controlKeys[] = {
     { kKeyF13,        kVK_F13 },
     { kKeyF14,        kVK_F14 },
     { kKeyF15,        kVK_F15 },
-    { kKeyF16,        kVK_F16 },
+    { kKeyF19,        kVK_F19 },
 
     { kKeyKP_0,        kVK_ANSI_Keypad0 },
     { kKeyKP_1,        kVK_ANSI_Keypad1 },
