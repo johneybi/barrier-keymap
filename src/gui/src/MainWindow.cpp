@@ -137,6 +137,9 @@ MainWindow::MainWindow(QSettings& settings, AppConfig& appConfig) :
     loadSettings();
     initConnections();
 
+    m_BarrierRestartTimer.setSingleShot(true);
+    connect(&m_BarrierRestartTimer, SIGNAL(timeout()),
+            this, SLOT(startBarrier()));
     m_BarrierProcessWatchdog.setInterval(barrierProcessWatchdogIntervalMs);
     connect(&m_BarrierProcessWatchdog, SIGNAL(timeout()),
             this, SLOT(ensureBarrierProcessRunning()));
@@ -601,6 +604,8 @@ void MainWindow::startBarrier()
     bool desktopMode = appConfig().processMode() == Desktop;
     bool serviceMode = appConfig().processMode() == Service;
 
+    m_BarrierRestartTimer.stop();
+
     if (desktopMode && barrierProcess()) {
         if (barrierProcess()->state() != QProcess::NotRunning) {
             appendLogInfo("barrier process is already running");
@@ -678,7 +683,12 @@ void MainWindow::startBarrier()
     // launched the process (e.g. when launched with elevation). setting the
     // profile dir on launch ensures it uses the same profile dir is used
     // no matter how its relaunched.
-    args << "--profile-dir" << QString::fromStdString("\"" + barrier::DataDirectories::profile().u8string() + "\"");
+    QString profileDir = QString::fromStdString(
+        barrier::DataDirectories::profile().u8string());
+    if (serviceMode) {
+        profileDir = QString("\"%1\"").arg(profileDir);
+    }
+    args << "--profile-dir" << profileDir;
 #endif
 
     if ((barrier_type() == BarrierType::Client && !clientArgs(args, app))
@@ -761,13 +771,17 @@ bool MainWindow::clientArgs(QStringList& args, QString& app)
 
 #if defined(Q_OS_WIN)
     // wrap in quotes so a malicious user can't start \Program.exe as admin.
-    app = QString("\"%1\"").arg(app);
+    if (appConfig().processMode() == Service) {
+        app = QString("\"%1\"").arg(app);
+    }
 #endif
 
     if (appConfig().logToFile())
     {
         appConfig().persistLogDir();
-        args << "--log" << appConfig().logFilenameCmd();
+        args << "--log" << (appConfig().processMode() == Desktop
+            ? appConfig().logFilename()
+            : appConfig().logFilenameCmd());
     }
 
     // check auto config first, if it is disabled or no server detected,
@@ -858,14 +872,18 @@ bool MainWindow::serverArgs(QStringList& args, QString& app)
 
 #if defined(Q_OS_WIN)
     // wrap in quotes so a malicious user can't start \Program.exe as admin.
-    app = QString("\"%1\"").arg(app);
+    if (appConfig().processMode() == Service) {
+        app = QString("\"%1\"").arg(app);
+    }
 #endif
 
     if (appConfig().logToFile())
     {
         appConfig().persistLogDir();
 
-        args << "--log" << appConfig().logFilenameCmd();
+        args << "--log" << (appConfig().processMode() == Desktop
+            ? appConfig().logFilename()
+            : appConfig().logFilenameCmd());
     }
 
     if (!appConfig().getRequireClientCertificate()) {
@@ -875,7 +893,9 @@ bool MainWindow::serverArgs(QStringList& args, QString& app)
     QString configFilename = this->configFilename();
 #if defined(Q_OS_WIN)
     // wrap in quotes in case username contains spaces.
-    configFilename = QString("\"%1\"").arg(configFilename);
+    if (appConfig().processMode() == Service) {
+        configFilename = QString("\"%1\"").arg(configFilename);
+    }
 #endif
     args << "-c" << configFilename << "--address" << address();
 
@@ -887,6 +907,7 @@ void MainWindow::stopBarrier()
     appendLogDebug("stopping process");
 
     m_ExpectedRunningState = kStopped;
+    m_BarrierRestartTimer.stop();
 
     if (appConfig().processMode() == Service)
     {
@@ -946,7 +967,9 @@ void MainWindow::barrierFinished(int exitCode, QProcess::ExitStatus)
     }
 
     if (m_ExpectedRunningState == kStarted) {
-        QTimer::singleShot(1000, this, SLOT(startBarrier()));
+        if (!m_BarrierRestartTimer.isActive()) {
+            m_BarrierRestartTimer.start(1000);
+        }
         appendLogInfo(QString("detected process not running, auto restarting"));
     }
     else {
@@ -966,8 +989,12 @@ void MainWindow::ensureBarrierProcessRunning()
         return;
     }
 
+    if (m_BarrierRestartTimer.isActive()) {
+        return;
+    }
+
     appendLogInfo(QString("barrier process is not running, recovering"));
-    startBarrier();
+    m_BarrierRestartTimer.start(0);
 }
 
 void MainWindow::setBarrierState(qBarrierState state)

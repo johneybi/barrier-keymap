@@ -181,6 +181,7 @@ public slots:
         QSettings& m_Settings;
         AppConfig* m_AppConfig;
         QProcess* m_pBarrier;
+        QTimer m_BarrierRestartTimer;
         QTimer m_BarrierProcessWatchdog;
         int m_BarrierState;
         ServerConfig m_ServerConfig;
