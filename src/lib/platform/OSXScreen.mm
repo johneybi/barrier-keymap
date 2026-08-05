@@ -70,6 +70,16 @@ bool					OSXScreen::s_hasGHOM	    = false;
 OSXScreen::OSXScreen(IEventQueue* events, bool isPrimary, bool autoShowHideCursor) :
 	m_isPrimary(isPrimary),
 	m_isOnScreen(m_isPrimary),
+	assertionID(0),
+	m_displayID(kCGNullDirectDisplay),
+	m_x(0),
+	m_y(0),
+	m_w(0),
+	m_h(0),
+	m_xCenter(0),
+	m_yCenter(0),
+	m_xCursor(0),
+	m_yCursor(0),
 	m_cursorPosValid(false),
 	MouseButtonEventMap(NumButtonIDs),
 	m_cursorHidden(false),
@@ -1471,31 +1481,37 @@ OSXScreen::updateScreenShape(const CGDirectDisplayID, const CGDisplayChangeSumma
 void
 OSXScreen::updateScreenShape()
 {
-	// get info for each display
 	CGDisplayCount displayCount = 0;
-
-    if (CGGetActiveDisplayList(0, nullptr, &displayCount) != CGDisplayNoErr) {
-		return;
+	std::vector<CGDirectDisplayID> displays;
+	CGError displayError =
+		CGGetActiveDisplayList(0, nullptr, &displayCount);
+	if (displayError == CGDisplayNoErr && displayCount > 0) {
+		displays.resize(displayCount);
+		displayError = CGGetActiveDisplayList(displayCount,
+			displays.data(), &displayCount);
+		if (displayError == CGDisplayNoErr) {
+			displays.resize(displayCount);
+		}
+		else {
+			displays.clear();
+		}
 	}
 
-	if (displayCount == 0) {
-		return;
-	}
+	if (displays.empty()) {
+		const CGDirectDisplayID mainDisplay = CGMainDisplayID();
+		const CGRect mainBounds = CGDisplayBounds(mainDisplay);
+		if (mainDisplay == kCGNullDirectDisplay || CGRectIsEmpty(mainBounds)) {
+			LOG_WARN("unable to determine a usable macOS display shape");
+			return;
+		}
 
-	CGDirectDisplayID* displays = new CGDirectDisplayID[displayCount];
-    if (displays == nullptr) {
-		return;
-	}
-
-	if (CGGetActiveDisplayList(displayCount,
-							displays, &displayCount) != CGDisplayNoErr) {
-		delete[] displays;
-		return;
+		LOG_WARN("active display query failed; using the main display bounds");
+		displays.push_back(mainDisplay);
 	}
 
 	// get smallest rect enclosing all display rects
-	CGRect totalBounds = CGRectZero;
-	for (CGDisplayCount i = 0; i < displayCount; ++i) {
+	CGRect totalBounds = CGDisplayBounds(displays.front());
+	for (std::size_t i = 1; i < displays.size(); ++i) {
 		CGRect bounds = CGDisplayBounds(displays[i]);
 		totalBounds   = CGRectUnion(totalBounds, bounds);
 	}
@@ -1512,13 +1528,12 @@ OSXScreen::updateScreenShape()
   m_xCenter = (rect.origin.x + rect.size.width) / 2;
   m_yCenter = (rect.origin.y + rect.size.height) / 2;
 
-	delete[] displays;
 	// We want to notify the peer screen whether we are primary screen or not
     sendEvent(EventType::SCREEN_SHAPE_CHANGED);
 
 	LOG_DEBUG("screen shape: center=%d,%d size=%dx%d on %u %s",
-         m_x, m_y, m_w, m_h, displayCount,
-         (displayCount == 1) ? "display" : "displays");
+         m_x, m_y, m_w, m_h, static_cast<unsigned int>(displays.size()),
+         (displays.size() == 1) ? "display" : "displays");
 }
 
 #pragma mark -
