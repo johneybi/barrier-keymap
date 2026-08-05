@@ -19,6 +19,7 @@
 #pragma once
 
 #include "server/InputFilter.h"
+#include "server/KeyRemapConfig.h"
 #include "inputleap/option_types.h"
 #include "inputleap/protocol_types.h"
 #include "inputleap/IPlatformScreen.h"
@@ -311,6 +312,11 @@ public:
         return input_filter_rules_;
     }
 
+    const KeyRemapConfig& get_key_remap_config() const
+    {
+        return key_remap_config_;
+    }
+
     //@}
     //! @name accessors
     //@{
@@ -444,6 +450,7 @@ private:
     void readSectionScreens(ConfigReadContext&);
     void readSectionLinks(ConfigReadContext&);
     void readSectionAliases(ConfigReadContext&);
+    void readSectionRemaps(ConfigReadContext&);
 
     InputFilter::Condition* parseCondition(ConfigReadContext&, const std::string& condition,
                                            const std::vector<std::string>& args);
@@ -462,6 +469,7 @@ private:
     NetworkAddress listen_address_;
     ScreenOptions m_globalOptions;
     std::vector<InputFilter::Rule> input_filter_rules_;
+    KeyRemapConfig key_remap_config_;
     bool m_hasLockToScreenAction;
 };
 

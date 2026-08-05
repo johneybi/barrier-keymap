@@ -23,11 +23,130 @@
 #include "inputleap/key_types.h"
 #include "net/XSocket.h"
 
+#include <algorithm>
+#include <cctype>
 #include <cstdlib>
 
 namespace inputleap {
 
 using namespace inputleap::string;
+
+namespace {
+
+std::string to_lower(const std::string& value)
+{
+    std::string lower(value);
+    std::transform(lower.begin(), lower.end(), lower.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    return lower;
+}
+
+std::string trim(const std::string& value)
+{
+    const auto begin = value.find_first_not_of(" \t");
+    if (begin == std::string::npos) {
+        return {};
+    }
+    const auto end = value.find_last_not_of(" \t");
+    return value.substr(begin, end - begin + 1);
+}
+
+std::string canonical_remap_key_name(const std::string& name)
+{
+    static const std::map<std::string, std::string> key_aliases = {
+        {"left_shift", "Shift_L"}, {"right_shift", "Shift_R"},
+        {"left_control", "Control_L"}, {"right_control", "Control_R"},
+        {"left_ctrl", "Control_L"}, {"right_ctrl", "Control_R"},
+        {"left_alt", "Alt_L"}, {"right_alt", "Alt_R"},
+        {"left_meta", "Meta_L"}, {"right_meta", "Meta_R"},
+        {"left_super", "Super_L"}, {"right_super", "Super_R"},
+        {"left_command", "Super_L"}, {"right_command", "Super_R"},
+        {"left_cmd", "Super_L"}, {"right_cmd", "Super_R"},
+        {"hangul", "Hangul"}, {"print_screen", "Print"}, {"space", "Space"}
+    };
+
+    const auto lower = to_lower(name);
+    const auto alias = key_aliases.find(lower);
+    if (alias != key_aliases.end()) {
+        return alias->second;
+    }
+
+    if (lower.size() >= 2 && lower[0] == 'f' &&
+        std::all_of(lower.begin() + 1, lower.end(),
+                    [](unsigned char c) { return std::isdigit(c) != 0; })) {
+        std::string key = lower;
+        key[0] = 'F';
+        return key;
+    }
+
+    return name;
+}
+
+std::string canonical_remap_keystroke_name(const std::string& name)
+{
+    static const std::map<std::string, std::string> modifier_aliases = {
+        {"alt", "Alt"}, {"altgr", "AltGr"}, {"control", "Control"},
+        {"ctrl", "Control"}, {"command", "Super"}, {"cmd", "Super"},
+        {"meta", "Meta"}, {"option", "Alt"}, {"shift", "Shift"},
+        {"super", "Super"}, {"win", "Super"}, {"windows", "Super"}
+    };
+
+    std::string canonical;
+    std::string::size_type begin = 0;
+    while (begin <= name.size()) {
+        const auto end = name.find('+', begin);
+        std::string part = trim(name.substr(
+            begin, end == std::string::npos ? std::string::npos : end - begin));
+        const auto modifier = modifier_aliases.find(to_lower(part));
+        part = modifier != modifier_aliases.end()
+                   ? modifier->second
+                   : canonical_remap_key_name(part);
+        if (!canonical.empty()) {
+            canonical += "+";
+        }
+        canonical += part;
+        if (end == std::string::npos) {
+            break;
+        }
+        begin = end + 1;
+    }
+    return canonical;
+}
+
+KeyID parse_remap_key(ConfigReadContext& context, const std::string& name)
+{
+    if (name.find('+') != std::string::npos) {
+        throw XConfigRead(context, "modifier chord is not valid here: \"%{1}\"", name);
+    }
+
+    KeyID key = kKeyNone;
+    const auto canonical = canonical_remap_key_name(name);
+    if (!KeyMap::parseKey(canonical, key) || key == kKeyNone) {
+        throw XConfigRead(context, "unable to parse remap key \"%{1}\"", name);
+    }
+    return key;
+}
+
+void parse_remap_keystroke(ConfigReadContext& context, const std::string& name,
+                           KeyModifierMask& mask, KeyID& key)
+{
+    auto canonical = canonical_remap_keystroke_name(name);
+    if (!KeyMap::parseModifiers(canonical, mask)) {
+        throw XConfigRead(context, "unable to parse remap key modifiers \"%{1}\"", name);
+    }
+    if (!KeyMap::parseKey(canonical, key) || key == kKeyNone) {
+        throw XConfigRead(context, "unable to parse remap key \"%{1}\"", name);
+    }
+}
+
+struct PendingTapRule {
+    KeyID alone_id{kKeyNone};
+    KeyID hold_id{kKeyNone};
+    bool has_alone{false};
+    bool has_hold{false};
+};
+
+} // namespace
 
 Config::Config() :
     m_hasLockToScreenAction(false)
@@ -568,6 +687,9 @@ Config::operator==(const Config& x) const
     if (!are_rules_equal(input_filter_rules_, x.input_filter_rules_)) {
 		return false;
 	}
+	if (key_remap_config_ != x.key_remap_config_) {
+		return false;
+	}
 
 	return true;
 }
@@ -615,6 +737,7 @@ Config::readSection(ConfigReadContext& s)
 	static const char s_screens[] = "screens";
 	static const char s_links[]   = "links";
 	static const char s_aliases[] = "aliases";
+	static const char s_remaps[]  = "remaps";
 
     std::string line;
 	if (!s.readLine(line)) {
@@ -650,6 +773,9 @@ Config::readSection(ConfigReadContext& s)
 	}
 	else if (name == s_aliases) {
 		readSectionAliases(s);
+	}
+	else if (name == s_remaps) {
+		readSectionRemaps(s);
 	}
 	else {
 		throw XConfigRead(s, "unknown section name \"%{1}\"", name);
@@ -1003,6 +1129,132 @@ Config::readSectionAliases(ConfigReadContext& s)
 		}
 	}
 	throw XConfigRead(s, "unexpected end of aliases section");
+}
+
+void Config::readSectionRemaps(ConfigReadContext& s)
+{
+    using TapKey = std::pair<std::string, KeyID>;
+    using PendingTapRules = std::map<TapKey, PendingTapRule>;
+    using ChordKey = std::pair<KeyID, KeyModifierMask>;
+    using ScreenChordKey = std::pair<std::string, ChordKey>;
+
+    PendingTapRules pending_tap_rules;
+    std::set<ScreenChordKey> chord_rules;
+    std::string line;
+    std::string screen;
+
+    while (s.readLine(line)) {
+        if (line == "end") {
+            for (const auto& entry : pending_tap_rules) {
+                const auto& rule = entry.second;
+                if (!rule.has_alone) {
+                    throw XConfigRead(s, "remap hold rule requires matching alone rule");
+                }
+                key_remap_config_.addTapRule(
+                    entry.first.first, entry.first.second, rule.alone_id,
+                    rule.has_hold ? rule.hold_id : entry.first.second);
+            }
+            return;
+        }
+
+        if (!line.empty() && line.back() == ':') {
+            screen = line.substr(0, line.size() - 1);
+            if (!isScreen(screen)) {
+                throw XConfigRead(s, "unknown screen name \"%{1}\"", screen);
+            }
+            if (!isCanonicalName(screen)) {
+                throw XConfigRead(s, "cannot use screen name alias here");
+            }
+            continue;
+        }
+
+        if (screen.empty()) {
+            throw XConfigRead(s, "argument before first screen");
+        }
+
+        const auto equals = line.find('=');
+        if (equals == std::string::npos) {
+            throw XConfigRead(s, "missing =");
+        }
+
+        std::string from = trim(line.substr(0, equals));
+        const std::string to = trim(line.substr(equals + 1));
+        if (from.empty()) {
+            throw XConfigRead(s, "missing remap source");
+        }
+        if (to.empty()) {
+            throw XConfigRead(s, "missing remap target");
+        }
+
+        std::string suffix;
+        const auto dot = from.rfind('.');
+        if (dot != std::string::npos) {
+            suffix = to_lower(from.substr(dot + 1));
+            from = from.substr(0, dot);
+        }
+
+        if (suffix.empty() &&
+            (from.find('+') != std::string::npos || to.find('+') != std::string::npos)) {
+            KeyModifierMask from_mask = 0;
+            KeyModifierMask to_mask = 0;
+            KeyID from_id = kKeyNone;
+            KeyID to_id = kKeyNone;
+            parse_remap_keystroke(s, from, from_mask, from_id);
+            parse_remap_keystroke(s, to, to_mask, to_id);
+            const ScreenChordKey chord_key(screen, ChordKey(from_id, from_mask));
+            if (!chord_rules.insert(chord_key).second) {
+                throw XConfigRead(s, "duplicate remap source \"%{1}\"", from);
+            }
+            if (from_mask == 0 &&
+                (key_remap_config_.findRule(screen, from_id) != nullptr ||
+                 pending_tap_rules.find(TapKey(screen, from_id)) != pending_tap_rules.end())) {
+                throw XConfigRead(s, "duplicate remap source \"%{1}\"", from);
+            }
+            key_remap_config_.addChordRule(screen, from_mask, from_id, to_mask, to_id);
+            continue;
+        }
+
+        const KeyID from_id = parse_remap_key(s, from);
+        const KeyID to_id = parse_remap_key(s, to);
+        const TapKey tap_key(screen, from_id);
+
+        if (suffix.empty()) {
+            if (key_remap_config_.findRule(screen, from_id) != nullptr ||
+                pending_tap_rules.find(tap_key) != pending_tap_rules.end() ||
+                chord_rules.find(ScreenChordKey(screen, ChordKey(from_id, 0))) !=
+                    chord_rules.end()) {
+                throw XConfigRead(s, "duplicate remap source \"%{1}\"", from);
+            }
+            key_remap_config_.addRule(screen, from_id, to_id);
+        }
+        else if (suffix == "alone") {
+            if (key_remap_config_.findRule(screen, from_id) != nullptr) {
+                throw XConfigRead(s, "duplicate remap source \"%{1}\"", from);
+            }
+            auto& rule = pending_tap_rules[tap_key];
+            if (rule.has_alone) {
+                throw XConfigRead(s, "duplicate alone remap source \"%{1}\"", from);
+            }
+            rule.alone_id = to_id;
+            rule.has_alone = true;
+        }
+        else if (suffix == "hold") {
+            if (key_remap_config_.findRule(screen, from_id) != nullptr) {
+                throw XConfigRead(s, "duplicate remap source \"%{1}\"", from);
+            }
+            auto& rule = pending_tap_rules[tap_key];
+            if (rule.has_hold) {
+                throw XConfigRead(s, "duplicate hold remap source \"%{1}\"", from);
+            }
+            rule.hold_id = to_id;
+            rule.has_hold = true;
+        }
+        else {
+            throw XConfigRead(s, "unknown remap suffix \"%{1}\"", suffix);
+        }
+    }
+
+    throw XConfigRead(s, "unexpected end of remaps section");
 }
 
 
@@ -1778,6 +2030,12 @@ operator<<(std::ostream& s, const Config& config)
             s << "\t\t" << index->second.c_str() << "\n";
 		}
         s << "end\n";
+	}
+
+	if (!config.key_remap_config_.empty()) {
+		s << "section: remaps\n";
+		config.key_remap_config_.write(s);
+		s << "end\n";
 	}
 
 	// options section

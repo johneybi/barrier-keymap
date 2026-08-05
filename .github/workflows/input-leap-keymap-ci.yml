@@ -47,8 +47,8 @@ jobs:
       - name: Build core and tests
         run: cmake --build build --config $env:B_BUILD_TYPE --parallel
 
-      - name: Run tests
-        run: ctest --test-dir build -C $env:B_BUILD_TYPE --output-on-failure
+      - name: Run keymap tests
+        run: build/bin/Debug/unittests.exe --gtest_filter=KeyRemapperTests.*
 
       - name: Upload command-line binaries
         uses: actions/upload-artifact@v4

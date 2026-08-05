@@ -1,0 +1,32 @@
+section: screens
+	server:
+	mac:
+	windows:
+end
+
+section: links
+	server:
+		right = mac
+		left = windows
+	mac:
+		left = server
+	windows:
+		right = server
+end
+
+section: remaps
+	mac:
+		right_alt.alone = F19
+		right_alt.hold = right_super
+		hangul.alone = F19
+		hangul.hold = right_super
+		control+c = command+c
+		control+v = command+v
+		print_screen = command+shift+4
+
+	windows:
+		left_super = left_control
+end
+
+section: options
+end

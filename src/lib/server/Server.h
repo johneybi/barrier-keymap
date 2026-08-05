@@ -19,6 +19,7 @@
 #pragma once
 
 #include "server/Config.h"
+#include "server/KeyRemapper.h"
 #include "inputleap/clipboard_types.h"
 #include "inputleap/Clipboard.h"
 #include "inputleap/key_types.h"
@@ -278,6 +279,10 @@ private:
     // returns true iff the delay switch timer is started
     bool isSwitchWaitStarted() const;
 
+    void update_key_remap_tap_timer();
+    void stop_key_remap_tap_timer();
+    void relay_key_remap_tap_hold_events(const KeyRemapper::ScreenKeyEventMap& events);
+
     // returns the corner (EScreenSwitchCornerMasks) where x,y is on the
     // given client.  corners have the given size.
     std::uint32_t getCorner(BaseClientProxy*, std::int32_t x, std::int32_t y,
@@ -307,6 +312,7 @@ private:
     void handle_screensaver_activated_event();
     void handle_screensaver_deactivated_event();
     void handle_switch_wait_event();
+    void handle_key_remap_tap_timeout();
     void handle_client_disconnected(BaseClientProxy* client);
     void handle_client_close_timeout(BaseClientProxy* client);
     void handle_switch_to_screen_event(const Event& event);
@@ -420,6 +426,9 @@ private:
 
     // input filter (from m_config);
     InputFilter input_filter_;
+
+    KeyRemapper key_remapper_;
+    EventQueueTimer* key_remap_tap_timer_;
 
     // clipboard cache
     ClipboardInfo m_clipboards[kClipboardEnd];
