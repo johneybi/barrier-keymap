@@ -1,0 +1,60 @@
+name: Input Leap keymap core
+
+on:
+  push:
+    branches:
+      - codex/input-leap-keymap
+  pull_request:
+    branches:
+      - codex/input-leap-keymap
+  workflow_dispatch:
+
+env:
+  B_BUILD_TYPE: Debug
+
+jobs:
+  windows-core:
+    runs-on: windows-2022
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Download Bonjour SDK-like
+        id: bonjour
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          New-Item -Force -ItemType Directory -Path deps | Out-Null
+          Invoke-WebRequest `
+            'https://github.com/nelsonjchen/mDNSResponder/releases/download/v2019.05.08.1/x64_RelWithDebInfo.zip' `
+            -OutFile 'deps/BonjourSDKLike.zip'
+          Expand-Archive 'deps/BonjourSDKLike.zip' -DestinationPath 'deps/BonjourSDKLike'
+          "path=$env:GITHUB_WORKSPACE\deps\BonjourSDKLike" >> $env:GITHUB_OUTPUT
+
+      - name: Configure core build
+        shell: pwsh
+        run: |
+          cmake -S . -B build -G "Visual Studio 17 2022" -A x64 `
+            -D CMAKE_BUILD_TYPE=$env:B_BUILD_TYPE `
+            -D INPUTLEAP_BUILD_GUI=OFF `
+            -D INPUTLEAP_BUILD_TESTS=ON `
+            -D DNSSD_LIB="${{ steps.bonjour.outputs.path }}\Lib\x64\dnssd.lib"
+        env:
+          BONJOUR_SDK_HOME: ${{ steps.bonjour.outputs.path }}
+
+      - name: Build core and tests
+        run: cmake --build build --config $env:B_BUILD_TYPE --parallel
+
+      - name: Run tests
+        run: ctest --test-dir build -C $env:B_BUILD_TYPE --output-on-failure
+
+      - name: Upload command-line binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: input-leap-keymap-windows-core
+          path: |
+            build/bin/Debug/input-leaps.exe
+            build/bin/Debug/input-leapc.exe
+          if-no-files-found: warn
