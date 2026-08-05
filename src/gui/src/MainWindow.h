@@ -27,6 +27,7 @@
 #include <QSettings>
 #include <QProcess>
 #include <QThread>
+#include <QTimer>
 
 #include "ui_MainWindowBase.h"
 
@@ -126,6 +127,7 @@ public slots:
         void on_m_pActionAbout_triggered();
         void on_m_pActionSettings_triggered();
         void barrierFinished(int exitCode, QProcess::ExitStatus);
+        void ensureBarrierProcessRunning();
         void trayActivated(QSystemTrayIcon::ActivationReason reason);
         void stopBarrier();
         void logOutput();
@@ -179,6 +181,7 @@ public slots:
         QSettings& m_Settings;
         AppConfig* m_AppConfig;
         QProcess* m_pBarrier;
+        QTimer m_BarrierProcessWatchdog;
         int m_BarrierState;
         ServerConfig m_ServerConfig;
         QTemporaryFile* m_pTempConfigFile;

@@ -71,6 +71,7 @@ static const QString barrierConfigFilter(QObject::tr("Barrier Configurations (*.
 #endif
 static const QString barrierConfigOpenFilter(barrierConfigFilter + ";;" + allFilesFilter);
 static const QString barrierConfigSaveFilter(barrierConfigFilter);
+static const int barrierProcessWatchdogIntervalMs = 5000;
 
 static const char* barrierIconFiles[] =
 {
@@ -135,6 +136,11 @@ MainWindow::MainWindow(QSettings& settings, AppConfig& appConfig) :
     createMenuBar();
     loadSettings();
     initConnections();
+
+    m_BarrierProcessWatchdog.setInterval(barrierProcessWatchdogIntervalMs);
+    connect(&m_BarrierProcessWatchdog, SIGNAL(timeout()),
+            this, SLOT(ensureBarrierProcessRunning()));
+    m_BarrierProcessWatchdog.start();
 
     m_pLabelScreenName->setText(getScreenName());
     m_pLabelIpAddresses->setText(getIPAddresses());
@@ -946,6 +952,22 @@ void MainWindow::barrierFinished(int exitCode, QProcess::ExitStatus)
     else {
         setBarrierState(barrierDisconnected);
     }
+}
+
+void MainWindow::ensureBarrierProcessRunning()
+{
+    if (appConfig().processMode() != Desktop ||
+        m_ExpectedRunningState != kStarted) {
+        return;
+    }
+
+    if (barrierProcess() &&
+        barrierProcess()->state() != QProcess::NotRunning) {
+        return;
+    }
+
+    appendLogInfo(QString("barrier process is not running, recovering"));
+    startBarrier();
 }
 
 void MainWindow::setBarrierState(qBarrierState state)
