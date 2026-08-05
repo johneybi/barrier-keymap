@@ -54,7 +54,12 @@ jobs:
         shell: pwsh
         run: |
           build/bin/Release/input-leaps.exe --version
-          build/bin/Release/input-leapc.exe --version 127.0.0.1
+          $clientVersion = build/bin/Release/input-leapc.exe --version 127.0.0.1 2>&1 | Out-String
+          $clientExit = $LASTEXITCODE
+          $clientVersion
+          if ($clientExit -ne 1 -or $clientVersion -notmatch 'input-leapc\.exe 3\.0\.3') {
+            throw "input-leapc smoke test failed with exit code $clientExit"
+          }
 
       - name: Upload command-line binaries
         uses: actions/upload-artifact@v4
