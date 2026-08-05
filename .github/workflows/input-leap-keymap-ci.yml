@@ -54,7 +54,7 @@ jobs:
         shell: pwsh
         run: |
           build/bin/Release/input-leaps.exe --version
-          build/bin/Release/input-leapc.exe --version
+          build/bin/Release/input-leapc.exe --version 127.0.0.1
 
       - name: Upload command-line binaries
         uses: actions/upload-artifact@v4
