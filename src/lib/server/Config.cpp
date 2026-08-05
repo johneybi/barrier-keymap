@@ -152,6 +152,7 @@ void parse_remap_keystroke(ConfigReadContext& context, const std::string& name,
 struct PendingTapRule {
     KeyID alone_id{kKeyNone};
     KeyID hold_id{kKeyNone};
+    KeyModifierMask alone_mask{0};
     bool has_alone{false};
     bool has_hold{false};
 };
@@ -1162,7 +1163,8 @@ void Config::readSectionRemaps(ConfigReadContext& s)
                 }
                 key_remap_config_.addTapRule(
                     entry.first.first, entry.first.second, rule.alone_id,
-                    rule.has_hold ? rule.hold_id : entry.first.second);
+                    rule.has_hold ? rule.hold_id : entry.first.second,
+                    rule.alone_mask);
             }
             return;
         }
@@ -1225,10 +1227,10 @@ void Config::readSectionRemaps(ConfigReadContext& s)
         }
 
         const KeyID from_id = parse_remap_key(s, from);
-        const KeyID to_id = parse_remap_key(s, to);
         const TapKey tap_key(screen, from_id);
 
         if (suffix.empty()) {
+            const KeyID to_id = parse_remap_key(s, to);
             if (key_remap_config_.findRule(screen, from_id) != nullptr ||
                 pending_tap_rules.find(tap_key) != pending_tap_rules.end() ||
                 chord_rules.find(ScreenChordKey(screen, ChordKey(from_id, 0))) !=
@@ -1245,7 +1247,7 @@ void Config::readSectionRemaps(ConfigReadContext& s)
             if (rule.has_alone) {
                 throw XConfigRead(s, "duplicate alone remap source \"%{1}\"", from);
             }
-            rule.alone_id = to_id;
+            parse_remap_keystroke(s, to, rule.alone_mask, rule.alone_id);
             rule.has_alone = true;
         }
         else if (suffix == "hold") {
@@ -1256,7 +1258,7 @@ void Config::readSectionRemaps(ConfigReadContext& s)
             if (rule.has_hold) {
                 throw XConfigRead(s, "duplicate hold remap source \"%{1}\"", from);
             }
-            rule.hold_id = to_id;
+            rule.hold_id = parse_remap_key(s, to);
             rule.has_hold = true;
         }
         else {

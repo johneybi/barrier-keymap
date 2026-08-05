@@ -88,12 +88,13 @@ private:
 	public:
 		PendingTap();
 		PendingTap(KeyID sourceID, KeyID aloneID, KeyID holdID,
-			KeyModifierMask mask, KeyButton button);
+			KeyModifierMask aloneMask, KeyModifierMask mask, KeyButton button);
 
 	public:
 		KeyID            m_sourceID;
 		KeyID            m_aloneID;
 		KeyID            m_holdID;
+		KeyModifierMask  m_aloneMask;
 		KeyModifierMask  m_mask;
 		KeyButton        m_button;
 	};

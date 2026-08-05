@@ -67,15 +67,17 @@ KeyRemapConfig::KeyRule::KeyRule(KeyID fromID, KeyID toID) :
 KeyRemapConfig::TapRule::TapRule() :
 	m_fromID(kKeyNone),
 	m_aloneID(kKeyNone),
-	m_holdID(kKeyNone)
+	m_holdID(kKeyNone),
+	m_aloneMask(0)
 {
 }
 
 KeyRemapConfig::TapRule::TapRule(KeyID fromID, KeyID aloneID,
-		KeyID holdID) :
+		KeyID holdID, KeyModifierMask aloneMask) :
 	m_fromID(fromID),
 	m_aloneID(aloneID),
-	m_holdID(holdID)
+	m_holdID(holdID),
+	m_aloneMask(aloneMask)
 {
 }
 
@@ -107,7 +109,8 @@ operator==(const KeyRemapConfig::TapRule& a, const KeyRemapConfig::TapRule& b)
 {
 	return a.m_fromID == b.m_fromID &&
 		a.m_aloneID == b.m_aloneID &&
-		a.m_holdID == b.m_holdID;
+		a.m_holdID == b.m_holdID &&
+		a.m_aloneMask == b.m_aloneMask;
 }
 
 bool
@@ -136,10 +139,10 @@ KeyRemapConfig::addRule(const std::string& screen, KeyID fromID, KeyID toID)
 
 void
 KeyRemapConfig::addTapRule(const std::string& screen, KeyID fromID,
-		KeyID aloneID, KeyID holdID)
+		KeyID aloneID, KeyID holdID, KeyModifierMask aloneMask)
 {
 	m_tapRules[normalizeScreen(screen)].push_back(
-		TapRule(fromID, aloneID, holdID));
+		TapRule(fromID, aloneID, holdID, aloneMask));
 }
 
 void
@@ -249,7 +252,8 @@ KeyRemapConfig::write(std::ostream& out) const
 			for (TapRuleList::const_iterator rule = tapScreen->second.begin();
 					rule != tapScreen->second.end(); ++rule) {
 				out << "\t\t" << KeyMap::formatKey(rule->m_fromID, 0)
-					<< ".alone = " << KeyMap::formatKey(rule->m_aloneID, 0) << "\n";
+					<< ".alone = " << KeyMap::formatKey(rule->m_aloneID,
+						rule->m_aloneMask) << "\n";
 				out << "\t\t" << KeyMap::formatKey(rule->m_fromID, 0)
 					<< ".hold = " << KeyMap::formatKey(rule->m_holdID, 0) << "\n";
 			}
@@ -278,7 +282,8 @@ KeyRemapConfig::write(std::ostream& out) const
 		for (TapRuleList::const_iterator rule = screen->second.begin();
 				rule != screen->second.end(); ++rule) {
 			out << "\t\t" << KeyMap::formatKey(rule->m_fromID, 0)
-				<< ".alone = " << KeyMap::formatKey(rule->m_aloneID, 0) << "\n";
+				<< ".alone = " << KeyMap::formatKey(rule->m_aloneID,
+					rule->m_aloneMask) << "\n";
 				out << "\t\t" << KeyMap::formatKey(rule->m_fromID, 0)
 					<< ".hold = " << KeyMap::formatKey(rule->m_holdID, 0) << "\n";
 		}

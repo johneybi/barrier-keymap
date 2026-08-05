@@ -110,6 +110,26 @@ TEST(KeyRemapperTests, tapRuleEmitsAloneKeyOnKeyUp)
 		0, kSuperButton);
 }
 
+TEST(KeyRemapperTests, tapRuleCanEmitModifierChord)
+{
+	KeyRemapConfig config;
+	config.addTapRule("mac", kKeyAlt_R, ' ', kKeyAlt_R,
+		KeyModifierControl);
+
+	KeyRemapper remapper(config);
+	KeyRemapper::KeyEventList down =
+		remapper.remapKeyDown("mac", kKeyAlt_R, KeyModifierAlt, kAltButton);
+	KeyRemapper::KeyEventList up =
+		remapper.remapKeyUp("mac", kKeyAlt_R, KeyModifierAlt, kAltButton);
+
+	EXPECT_TRUE(down.empty());
+	ASSERT_EQ(2u, up.size());
+	expectEvent(up[0], KeyRemapper::KeyEvent::kDown, ' ',
+		KeyModifierControl, kAltButton);
+	expectEvent(up[1], KeyRemapper::KeyEvent::kUp, ' ',
+		KeyModifierControl, kAltButton);
+}
+
 TEST(KeyRemapperTests, rightAltTapSendsPlainF19AndHoldActsAsRightSuper)
 {
 	KeyRemapConfig config;
@@ -381,6 +401,30 @@ TEST(KeyRemapperTests, configReadsHangulTapAlias)
 	ASSERT_TRUE(rule != nullptr);
 	EXPECT_EQ(kKeyHangul, rule->m_aloneID);
 	EXPECT_EQ(kKeySuper_R, rule->m_holdID);
+}
+
+TEST(KeyRemapperTests, configReadsTapTargetChord)
+{
+	Config config;
+	std::stringstream stream;
+	stream
+		<< "section: screens\n"
+		<< "\tserver:\n"
+		<< "\tmac:\n"
+		<< "end\n"
+		<< "section: remaps\n"
+		<< "\tmac:\n"
+		<< "\t\tright_alt.alone = control+space\n"
+		<< "end\n";
+
+	stream >> config;
+
+	const KeyRemapConfig::TapRule* rule =
+		config.get_key_remap_config().findTapRule("mac", kKeyAlt_R);
+	ASSERT_NE(nullptr, rule);
+	EXPECT_EQ(' ', rule->m_aloneID);
+	EXPECT_EQ(KeyModifierControl, rule->m_aloneMask);
+	EXPECT_EQ(kKeyAlt_R, rule->m_holdID);
 }
 
 TEST(KeyRemapperTests, configReadsHangulSourceForWindowsKoreanRightAlt)

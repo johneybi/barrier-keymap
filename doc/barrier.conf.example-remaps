@@ -16,9 +16,9 @@ end
 
 section: remaps
 	mac:
-		right_alt.alone = F19
+		right_alt.alone = control+space
 		right_alt.hold = right_super
-		hangul.alone = F19
+		hangul.alone = control+space
 		hangul.hold = right_super
 		control+c = command+c
 		control+v = command+v

@@ -42,12 +42,14 @@ public:
 	class TapRule {
 	public:
 		TapRule();
-		TapRule(KeyID fromID, KeyID aloneID, KeyID holdID);
+		TapRule(KeyID fromID, KeyID aloneID, KeyID holdID,
+			KeyModifierMask aloneMask = 0);
 
 	public:
 		KeyID m_fromID;
 		KeyID m_aloneID;
 		KeyID m_holdID;
+		KeyModifierMask m_aloneMask;
 	};
 
 	class ChordRule {
@@ -71,7 +73,7 @@ public:
 
 	void addRule(const std::string& screen, KeyID fromID, KeyID toID);
 	void addTapRule(const std::string& screen, KeyID fromID,
-		KeyID aloneID, KeyID holdID);
+		KeyID aloneID, KeyID holdID, KeyModifierMask aloneMask = 0);
 	void addChordRule(const std::string& screen, KeyModifierMask fromMask,
 		KeyID fromID, KeyModifierMask toMask, KeyID toID);
 	void clear();

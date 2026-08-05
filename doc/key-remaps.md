@@ -11,9 +11,9 @@ names.
 ```text
 section: remaps
   mac:
-    right_alt.alone = F19
+    right_alt.alone = control+space
     right_alt.hold = right_super
-    hangul.alone = F19
+    hangul.alone = control+space
     hangul.hold = right_super
     control+c = command+c
     control+v = command+v
@@ -41,7 +41,7 @@ key remaps. Remaps are applied once and are not chained into another rule.
 ### Tap-hold remap
 
 ```text
-right_alt.alone = F16
+right_alt.alone = control+space
 right_alt.hold = right_super
 ```
 
@@ -52,26 +52,27 @@ right_super.alone = hangul
 ```
 
 When the source key is pressed, Input Leap holds the event pending. If the key
-is released without another key, Input Leap sends the `.alone` key as a tap. If
+is released without another key, Input Leap sends the `.alone` key or chord as a tap. If
 any other key arrives first, Input Leap sends the `.hold` key down and lets it act
-as a modifier. If no other key arrives within 200 ms, Barrier treats the key as
+as a modifier. If no other key arrives within 200 ms, Input Leap treats the key as
 a hold and sends the `.hold` key down so long modifier presses do not wait until
 the next key.
 
 If `.hold` is omitted, the source key is used as the hold key. A `.hold` rule
 requires a matching `.alone` rule.
 
-The macOS example sends a plain `F19` when Right Alt is tapped, while using
-Right Super when Right Alt is held with another key.
+The macOS example sends the native macOS input-source shortcut
+`Control+Space` when Right Alt is tapped, while using Right Super when Right
+Alt is held with another key. It does not require Karabiner.
 
 On a Windows server using the Korean keyboard layout, Windows reports the
 physical Right Alt key as `Hangul` instead of `Alt_R`. Configure both source
 rules when the same Input Leap configuration may be used across keyboard layouts:
 
 ```text
-right_alt.alone = F19
+right_alt.alone = control+space
 right_alt.hold = right_super
-hangul.alone = F19
+hangul.alone = control+space
 hangul.hold = right_super
 ```
 

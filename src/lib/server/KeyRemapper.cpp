@@ -85,16 +85,19 @@ KeyRemapper::PendingTap::PendingTap() :
 	m_sourceID(kKeyNone),
 	m_aloneID(kKeyNone),
 	m_holdID(kKeyNone),
+	m_aloneMask(0),
 	m_mask(0),
 	m_button(0)
 {
 }
 
 KeyRemapper::PendingTap::PendingTap(KeyID sourceID, KeyID aloneID,
-		KeyID holdID, KeyModifierMask mask, KeyButton button) :
+		KeyID holdID, KeyModifierMask aloneMask, KeyModifierMask mask,
+		KeyButton button) :
 	m_sourceID(sourceID),
 	m_aloneID(aloneID),
 	m_holdID(holdID),
+	m_aloneMask(aloneMask),
 	m_mask(mask),
 	m_button(button)
 {
@@ -129,7 +132,7 @@ KeyRemapper::remapKeyDown(const std::string& screen, KeyID id,
 	if (tapRule != nullptr) {
 		m_pendingTaps[normalizedScreen][button] =
 			PendingTap(tapRule->m_fromID, tapRule->m_aloneID,
-				tapRule->m_holdID, mask, button);
+				tapRule->m_holdID, tapRule->m_aloneMask, mask, button);
 		LOG_DEBUG1("key remap pending tap screen=\"%s\" key=%s alone=%s hold=%s button=0x%04x",
 			screen.c_str(), keyName(tapRule->m_fromID).c_str(),
 			keyName(tapRule->m_aloneID).c_str(),
@@ -192,13 +195,13 @@ KeyRemapper::remapKeyUp(const std::string& screen, KeyID id,
 			KeyModifierMask tapMask =
 				mask & ~modifierForKey(tap.m_sourceID);
 			tapMask = translateMask(normalizedScreen, tapMask);
-			KeyEvent down(KeyEvent::kDown, tap.m_aloneID, tapMask, tap.m_button);
-			KeyEvent up(KeyEvent::kUp, tap.m_aloneID, tapMask, tap.m_button);
+			KeyRemapConfig::ChordRule tapRule(0, tap.m_sourceID,
+				tap.m_aloneMask, tap.m_aloneID);
 			LOG_DEBUG1("key remap tap screen=\"%s\" key=%s->%s button=0x%04x",
 				screen.c_str(), keyName(tap.m_sourceID).c_str(),
 				keyName(tap.m_aloneID).c_str(), tap.m_button);
-			events.push_back(down);
-			events.push_back(up);
+			emitChordTap(normalizedScreen, tapRule, tapMask,
+				tap.m_button, events);
 			return events;
 		}
 	}
