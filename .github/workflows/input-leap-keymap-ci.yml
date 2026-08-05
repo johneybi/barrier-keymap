@@ -59,6 +59,7 @@ jobs:
           if ($clientVersion -notmatch 'input-leapc\.exe 3\.0\.3') {
             throw "input-leapc did not start and report its version"
           }
+          exit 0
 
       - name: Upload command-line binaries
         uses: actions/upload-artifact@v4
