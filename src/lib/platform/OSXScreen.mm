@@ -112,6 +112,10 @@ OSXScreen::OSXScreen(IEventQueue* events, bool isPrimary, bool autoShowHideCurso
 	try {
 		m_displayID   = CGMainDisplayID();
 		updateScreenShape(m_displayID, 0);
+		if (m_w <= 0 || m_h <= 0) {
+			throw std::runtime_error(
+				"unable to determine a usable macOS display shape");
+		}
         m_screensaver = new OSXScreenSaver(m_events, get_event_target());
 		m_keyState	  = new OSXKeyState(m_events);
 
@@ -1499,8 +1503,12 @@ OSXScreen::updateScreenShape()
 
 	if (displays.empty()) {
 		const CGDirectDisplayID mainDisplay = CGMainDisplayID();
+		if (mainDisplay == kCGNullDirectDisplay) {
+			LOG_WARN("unable to determine a usable macOS display shape");
+			return;
+		}
 		const CGRect mainBounds = CGDisplayBounds(mainDisplay);
-		if (mainDisplay == kCGNullDirectDisplay || CGRectIsEmpty(mainBounds)) {
+		if (CGRectIsEmpty(mainBounds)) {
 			LOG_WARN("unable to determine a usable macOS display shape");
 			return;
 		}
