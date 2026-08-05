@@ -53,8 +53,8 @@ jobs:
       - name: Smoke test command-line binaries
         shell: pwsh
         run: |
-          build/bin/Release/input-leaps.exe --help
-          build/bin/Release/input-leapc.exe --help
+          build/bin/Release/input-leaps.exe --version
+          build/bin/Release/input-leapc.exe --version
 
       - name: Upload command-line binaries
         uses: actions/upload-artifact@v4
