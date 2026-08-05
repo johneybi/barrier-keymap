@@ -113,6 +113,16 @@ std::string canonical_remap_keystroke_name(const std::string& name)
     return canonical;
 }
 
+bool parse_remap_key_id(const std::string& name, KeyID& key)
+{
+    if (to_lower(name) == "hangul") {
+        key = kKeyHangul;
+        return true;
+    }
+
+    return KeyMap::parseKey(name, key);
+}
+
 KeyID parse_remap_key(ConfigReadContext& context, const std::string& name)
 {
     if (name.find('+') != std::string::npos) {
@@ -121,7 +131,7 @@ KeyID parse_remap_key(ConfigReadContext& context, const std::string& name)
 
     KeyID key = kKeyNone;
     const auto canonical = canonical_remap_key_name(name);
-    if (!KeyMap::parseKey(canonical, key) || key == kKeyNone) {
+    if (!parse_remap_key_id(canonical, key) || key == kKeyNone) {
         throw XConfigRead(context, "unable to parse remap key \"%{1}\"", name);
     }
     return key;
@@ -134,7 +144,7 @@ void parse_remap_keystroke(ConfigReadContext& context, const std::string& name,
     if (!KeyMap::parseModifiers(canonical, mask)) {
         throw XConfigRead(context, "unable to parse remap key modifiers \"%{1}\"", name);
     }
-    if (!KeyMap::parseKey(canonical, key) || key == kKeyNone) {
+    if (!parse_remap_key_id(canonical, key) || key == kKeyNone) {
         throw XConfigRead(context, "unable to parse remap key \"%{1}\"", name);
     }
 }
