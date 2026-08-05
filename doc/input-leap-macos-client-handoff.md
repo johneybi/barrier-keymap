@@ -6,7 +6,7 @@ Use this client with the Windows server from branch
 ## Download and install
 
 ```sh
-gh run download 31041372747 \
+gh run download 31041910240 \
   -R johneybi/barrier-keymap \
   -n input-leap-keymap-macos-arm64-client
 
