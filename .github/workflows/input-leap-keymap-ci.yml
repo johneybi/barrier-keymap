@@ -69,3 +69,73 @@ jobs:
             build/bin/Release/input-leaps.exe
             build/bin/Release/input-leapc.exe
           if-no-files-found: warn
+
+  macos-arm64-client:
+    runs-on: macos-14
+    env:
+      OPENSSL_VERSION: 3.2.0
+      OPENSSL_PREFIX: /Users/runner/openssl-arm64
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install build tools
+        run: brew install ninja
+
+      - name: Cache arm64 OpenSSL
+        id: cache-openssl
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.OPENSSL_PREFIX }}
+          key: macos-arm64-openssl-${{ env.OPENSSL_VERSION }}
+
+      - name: Build arm64 OpenSSL
+        if: steps.cache-openssl.outputs.cache-hit != 'true'
+        run: |
+          curl -L --fail --retry 3 \
+            "https://github.com/openssl/openssl/releases/download/openssl-${OPENSSL_VERSION}/openssl-${OPENSSL_VERSION}.tar.gz" \
+            -o openssl.tar.gz
+          tar -xzf openssl.tar.gz
+          cd "openssl-${OPENSSL_VERSION}"
+          export MACOSX_DEPLOYMENT_TARGET=11.0
+          ./Configure no-asm darwin64-arm64-cc --prefix="${OPENSSL_PREFIX}"
+          make -j"$(sysctl -n hw.logicalcpu)"
+          make install_sw
+
+      - name: Configure arm64 client
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 \
+            -DOpenSSL_ROOT="${OPENSSL_PREFIX}" \
+            -DINPUTLEAP_BUILD_GUI=OFF \
+            -DINPUTLEAP_BUILD_TESTS=OFF \
+            -DINPUTLEAP_VERSION_DESC=git
+
+      - name: Build arm64 client
+        run: cmake --build build --target input-leapc --parallel
+
+      - name: Sign and verify arm64 client
+        run: |
+          codesign --force --sign - build/bin/input-leapc
+          codesign --verify --verbose=2 build/bin/input-leapc
+          test "$(lipo -archs build/bin/input-leapc)" = "arm64"
+          file build/bin/input-leapc
+          if [[ "$(uname -m)" == "arm64" ]]; then
+            set +e
+            version_output="$(build/bin/input-leapc --version 127.0.0.1 2>&1)"
+            set -e
+            echo "${version_output}"
+            grep -q "input-leapc 3.0.3" <<< "${version_output}"
+          fi
+          tar -czf input-leap-keymap-macos-arm64.tar.gz -C build/bin input-leapc
+
+      - name: Upload arm64 client
+        uses: actions/upload-artifact@v4
+        with:
+          name: input-leap-keymap-macos-arm64-client
+          path: input-leap-keymap-macos-arm64.tar.gz
+          if-no-files-found: error
