@@ -16,6 +16,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+// Keep this first: MSVC otherwise resolves generated config.h to server/Config.h.
+#include "server/Config.h"
 #include "server/KeyRemapConfig.h"
 
 #include "inputleap/KeyMap.h"
