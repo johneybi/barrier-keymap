@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 env:
-  B_BUILD_TYPE: Debug
+  B_BUILD_TYPE: Release
 
 jobs:
   windows-core:
@@ -48,13 +48,19 @@ jobs:
         run: cmake --build build --config $env:B_BUILD_TYPE --parallel
 
       - name: Run keymap tests
-        run: build/bin/Debug/unittests.exe --gtest_filter=KeyRemapperTests.*
+        run: build/bin/Release/unittests.exe --gtest_filter=KeyRemapperTests.*
+
+      - name: Smoke test command-line binaries
+        shell: pwsh
+        run: |
+          build/bin/Release/input-leaps.exe --help
+          build/bin/Release/input-leapc.exe --help
 
       - name: Upload command-line binaries
         uses: actions/upload-artifact@v4
         with:
           name: input-leap-keymap-windows-core
           path: |
-            build/bin/Debug/input-leaps.exe
-            build/bin/Debug/input-leapc.exe
+            build/bin/Release/input-leaps.exe
+            build/bin/Release/input-leapc.exe
           if-no-files-found: warn
