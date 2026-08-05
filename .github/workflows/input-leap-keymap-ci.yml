@@ -110,6 +110,7 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_OSX_ARCHITECTURES=arm64 \
             -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 \
+            -DCMAKE_OSX_SYSROOT="$(xcrun --sdk macosx --show-sdk-path)" \
             -DOpenSSL_ROOT="${OPENSSL_PREFIX}" \
             -DINPUTLEAP_BUILD_GUI=OFF \
             -DINPUTLEAP_BUILD_TESTS=OFF \
