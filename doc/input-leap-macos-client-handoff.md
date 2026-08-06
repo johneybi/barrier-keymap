@@ -16,7 +16,7 @@ run_id="$(gh run list \
 
 gh run download "$run_id" \
   -R johneybi/barrier-keymap \
-  -n input-leap-keymap-macos-arm64-client
+  -n input-leap-keymap-macos-arm64-app
 
 tar -xzf input-leap-keymap-macos-arm64.tar.gz
 cp -R "Input Leap Keymap.app" /Applications/
@@ -53,25 +53,25 @@ test path.
 
 ## Start the client
 
-```sh
-mkdir -p "$HOME/Library/Logs/InputLeapKeymap"
+Open `Input Leap Keymap` from Applications. On the first launch, enable the
+same application in System Settings > Privacy & Security > Accessibility,
+then reopen it.
 
-"/Applications/Input Leap Keymap.app/Contents/MacOS/input-leapc" \
-  --no-daemon \
-  --disable-crypto \
-  --debug INFO \
-  --name ESKui-MacBookPro \
-  --log "$HOME/Library/Logs/InputLeapKeymap/client.log" \
-  192.168.0.10:24800
-```
+In the GUI:
+
+1. Select `Client`.
+2. Disable `Auto config` and enter `192.168.0.10` as the server IP.
+3. Open Settings and set the screen name to `ESKui-MacBookPro`.
+4. Disable SSL and enable `Show Tray Icon upon App Start`.
+5. Press Start.
 
 The Windows server configuration contains only the client name
 `ESKui-MacBookPro`, without a `.local` suffix.
 
-The current beta bundle contains the command-line client, not a persistent GUI
-launcher. Keep this Terminal command running; closing its Terminal tab stops
-the client. Do not attach it to a background LaunchAgent yet, because the
-client needs to create its Quartz event tap in an interactive GUI session.
+The GUI owns and monitors the bundled `input-leapc` process. Closing a Terminal
+or Codex task no longer stops the client. Avoid starting the bundled command-line
+client separately, because two clients with the same screen name cause duplicate
+server connections and can make input appear intermittent.
 
 ## Current Windows state
 

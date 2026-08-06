@@ -4,18 +4,17 @@
     <key>CFBundleDevelopmentRegion</key>
     <string>English</string>
     <key>CFBundleDisplayName</key>
-    <string>InputLeap</string>
+    <string>Input Leap Keymap</string>
     <key>CFBundleExecutable</key>
     <string>input-leap</string>
     <key>CFBundleIconFile</key>
     <string>InputLeap.icns</string>
     <key>CFBundleIdentifier</key>
-    <string>input-leap</string>
-    <!-- TODO: Fix this in v2.0 //-->
+    <string>com.johneybi.input-leap-keymap.client</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
-    <string>InputLeap</string>
+    <string>Input Leap Keymap</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleSignature</key>
@@ -31,6 +30,8 @@
     <key>NSHumanReadableCopyright</key>
     <string>© InputLeap contributors</string>
     <key>LSMinimumSystemVersion</key>
-    <string>10.12.0</string>
+    <string>11.0</string>
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>Connect to the Input Leap server on your local network.</string>
   </dict>
 </plist>

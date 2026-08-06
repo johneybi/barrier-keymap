@@ -70,7 +70,7 @@ jobs:
             build/bin/Release/input-leapc.exe
           if-no-files-found: warn
 
-  macos-arm64-client:
+  macos-arm64-app:
     runs-on: macos-14
     env:
       OPENSSL_VERSION: 3.2.0
@@ -82,7 +82,7 @@ jobs:
           submodules: recursive
 
       - name: Install build tools
-        run: brew install ninja
+        run: brew install ninja qt@5
 
       - name: Cache arm64 OpenSSL
         id: cache-openssl
@@ -104,7 +104,7 @@ jobs:
           make -j"$(sysctl -n hw.logicalcpu)"
           make install_sw
 
-      - name: Configure arm64 client
+      - name: Configure arm64 app
         run: |
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
@@ -112,21 +112,28 @@ jobs:
             -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 \
             -DCMAKE_OSX_SYSROOT="$(xcrun --sdk macosx --show-sdk-path)" \
             -DOpenSSL_ROOT="${OPENSSL_PREFIX}" \
-            -DINPUTLEAP_BUILD_GUI=OFF \
+            -DCMAKE_PREFIX_PATH="$(brew --prefix qt@5)" \
+            -DQT_DEFAULT_MAJOR_VERSION=5 \
+            -DINPUTLEAP_BUILD_GULRAK_FILESYSTEM=ON \
+            -DINPUTLEAP_BUILD_GUI=ON \
             -DINPUTLEAP_BUILD_TESTS=OFF \
             -DINPUTLEAP_VERSION_DESC=git
 
-      - name: Build arm64 client
-        run: cmake --build build --target input-leapc --parallel
+      - name: Build arm64 app
+        run: cmake --build build --target input-leap input-leapc input-leaps --parallel
 
-      - name: Package and verify arm64 client app
+      - name: Package and verify arm64 app
         run: |
-          chmod +x dist/macos/package_keymap_client.sh
+          chmod +x dist/macos/package_keymap_gui.sh
           INPUTLEAP_KEYMAP_VERSION="3.0.3-${GITHUB_SHA::7}" \
-            dist/macos/package_keymap_client.sh \
-              build/bin/input-leapc "Input Leap Keymap.app"
-          test "$(lipo -archs build/bin/input-leapc)" = "arm64"
-          file build/bin/input-leapc
+          MACDEPLOYQT="$(brew --prefix qt@5)/bin/macdeployqt" \
+            dist/macos/package_keymap_gui.sh \
+              build/bin/input-leap build/bin/input-leapc \
+              build/bin/input-leaps "Input Leap Keymap.app"
+          for binary in input-leap input-leapc input-leaps; do
+            test "$(lipo -archs "build/bin/${binary}")" = "arm64"
+            file "build/bin/${binary}"
+          done
           codesign -d -r- "Input Leap Keymap.app" 2>&1 | \
             grep -F 'designated => identifier "com.johneybi.input-leap-keymap.client"'
           if [[ "$(uname -m)" == "arm64" ]]; then
@@ -138,9 +145,9 @@ jobs:
           fi
           tar -czf input-leap-keymap-macos-arm64.tar.gz "Input Leap Keymap.app"
 
-      - name: Upload arm64 client
+      - name: Upload arm64 app
         uses: actions/upload-artifact@v4
         with:
-          name: input-leap-keymap-macos-arm64-client
+          name: input-leap-keymap-macos-arm64-app
           path: input-leap-keymap-macos-arm64.tar.gz
           if-no-files-found: error
