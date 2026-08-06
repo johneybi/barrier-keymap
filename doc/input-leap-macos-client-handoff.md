@@ -1,32 +1,39 @@
 # Input Leap macOS arm64 client handoff
 
 Use this client with the Windows server from branch
-`codex/input-leap-keymap`. This test does not use Karabiner or VirtualHID.
+`codex/input-leap-keymap`. The native mappings currently under test do not
+require Karabiner or VirtualHID.
 
 ## Download and install
 
 ```sh
-gh run download 31042349918 \
+run_id="$(gh run list \
+  -R johneybi/barrier-keymap \
+  -w input-leap-keymap-ci.yml \
+  -b codex/input-leap-keymap \
+  -s success -L 1 \
+  --json databaseId --jq '.[0].databaseId')"
+
+gh run download "$run_id" \
   -R johneybi/barrier-keymap \
   -n input-leap-keymap-macos-arm64-client
 
 tar -xzf input-leap-keymap-macos-arm64.tar.gz
-mkdir -p "$HOME/Applications/InputLeapKeymap"
-cp input-leapc "$HOME/Applications/InputLeapKeymap/input-leapc"
-chmod 755 "$HOME/Applications/InputLeapKeymap/input-leapc"
-xattr -dr com.apple.quarantine "$HOME/Applications/InputLeapKeymap"
-codesign --verify --verbose=2 "$HOME/Applications/InputLeapKeymap/input-leapc"
+cp -R "Input Leap Keymap.app" /Applications/
+xattr -dr com.apple.quarantine "/Applications/Input Leap Keymap.app"
+codesign --verify --deep --strict --verbose=2 \
+  "/Applications/Input Leap Keymap.app"
 ```
 
-Keep this path stable so macOS Accessibility permission remains associated
-with the same executable.
+Keep the application path and bundle identifier stable so macOS Accessibility
+permission remains associated with the client.
 
 ## Permissions
 
 In System Settings, open Privacy & Security > Accessibility and enable:
 
 ```text
-~/Applications/InputLeapKeymap/input-leapc
+Input Leap Keymap
 ```
 
 Do not run the client as root. Karabiner and VirtualHID are not part of this
@@ -37,10 +44,10 @@ test path.
 ```sh
 mkdir -p "$HOME/Library/Logs/InputLeapKeymap"
 
-"$HOME/Applications/InputLeapKeymap/input-leapc" \
+"/Applications/Input Leap Keymap.app/Contents/MacOS/input-leapc" \
   --no-daemon \
   --disable-crypto \
-  --debug DEBUG1 \
+  --debug INFO \
   --name ESKui-MacBookPro \
   --log "$HOME/Library/Logs/InputLeapKeymap/client.log" \
   192.168.0.10:24800
@@ -70,37 +77,39 @@ send key down ... id=60936, mask=0x0000
 send key up ... id=60936, mask=0x0000
 ```
 
-The old custom Barrier client ignored `NextGroup`. That result is not evidence
-against the Input Leap client path and should not be worked around on the
-Windows server.
+The Windows handoff is confirmed working: the Mac receives `0xEE08`, executes
+the relative group keystroke, and selects the next enabled macOS input source.
 
 ## Input-source test
 
 Confirm that macOS has at least two enabled input sources. With the pointer on
-the Mac, tap Windows Right Alt and inspect the Mac DEBUG1 log for receipt of
-key ID `0xEE08`.
-
-If the Input Leap client receives `0xEE08` but the input source does not change,
-fix the macOS implementation rather than replacing the command with F-keys,
-Karabiner, or VirtualHID. The relevant path is:
+the Mac, tap Windows Right Alt. The implemented path is:
 
 ```text
 KeyState::fakeKeyDown(kKeyNextGroup)
   -> KeyMap::mapKey()
   -> Keystroke::kGroup
   -> OSXKeyState::fakeKey()
-  -> OSXKeyState::setGroup()
+  -> OSXKeyState::cycleInputSource()
+  -> TISSelectInputSource()
 ```
 
-`OSXKeyState::setGroup()` currently uses
-`TISSetInputMethodKeyboardLayoutOverride()`. Verify whether the enabled Korean
-and Latin input sources require selecting the actual source with
-`TISSelectInputSource()` on the target macOS version. Add logs for the current
-source ID, candidate source IDs, selected index, and API return status.
+Keyboard layout groups and selectable input sources are intentionally separate.
+Regular key mapping uses only sources with Unicode keyboard-layout data, while
+`NextGroup` cycles enabled, selectable sources such as ABC and 2-Set Korean.
+This prevents a source switch around every ordinary key event.
 
-Do not reintroduce Karabiner, the privileged VirtualHID helper, or F16/F18/F19
-translation. Commit and push the Mac-side diagnosis and fix to
-`codex/input-leap-keymap`.
+## Confirmed macOS latency fix
+
+Current macOS versions can leave Carbon `Syne` wake events pending for hundreds
+of milliseconds. Before the fix, the client received 278 to 482 mouse messages
+per second but forwarded only 2 to 4 positions. The macOS event buffer now
+keeps Input Leap event IDs in a thread-safe FIFO and checks it at least every
+4 ms. A live test forwarded 169 of 708 coalesced positions in one second and
+the pointer was smooth.
+
+Keep production tests at `INFO`. `DEBUG1` is useful for a single key diagnosis,
+but should not be used for sustained usability testing.
 
 ## Remaining keymap checks
 

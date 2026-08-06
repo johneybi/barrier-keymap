@@ -119,10 +119,12 @@ jobs:
       - name: Build arm64 client
         run: cmake --build build --target input-leapc --parallel
 
-      - name: Sign and verify arm64 client
+      - name: Package and verify arm64 client app
         run: |
-          codesign --force --sign - build/bin/input-leapc
-          codesign --verify --verbose=2 build/bin/input-leapc
+          chmod +x dist/macos/package_keymap_client.sh
+          INPUTLEAP_KEYMAP_VERSION="3.0.3-${GITHUB_SHA::7}" \
+            dist/macos/package_keymap_client.sh \
+              build/bin/input-leapc "Input Leap Keymap.app"
           test "$(lipo -archs build/bin/input-leapc)" = "arm64"
           file build/bin/input-leapc
           if [[ "$(uname -m)" == "arm64" ]]; then
@@ -132,7 +134,7 @@ jobs:
             echo "${version_output}"
             grep -q "input-leapc 3.0.3" <<< "${version_output}"
           fi
-          tar -czf input-leap-keymap-macos-arm64.tar.gz -C build/bin input-leapc
+          tar -czf input-leap-keymap-macos-arm64.tar.gz "Input Leap Keymap.app"
 
       - name: Upload arm64 client
         uses: actions/upload-artifact@v4

@@ -1,0 +1,58 @@
+#!/bin/sh
+
+set -eu
+
+if [ "$#" -ne 2 ]; then
+    echo "usage: $0 INPUT_LEAPC OUTPUT_APP" >&2
+    exit 2
+fi
+
+binary="$1"
+app="$2"
+contents="$app/Contents"
+version="${INPUTLEAP_KEYMAP_VERSION:-3.0.3}"
+
+rm -rf "$app"
+mkdir -p "$contents/MacOS" "$contents/Resources"
+cp "$binary" "$contents/MacOS/input-leapc"
+chmod 755 "$contents/MacOS/input-leapc"
+cp "$(dirname "$0")/bundle/InputLeap.app/Contents/Resources/InputLeap.icns" \
+    "$contents/Resources/InputLeap.icns"
+
+cat > "$contents/Info.plist" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDisplayName</key>
+    <string>Input Leap Keymap</string>
+    <key>CFBundleExecutable</key>
+    <string>input-leapc</string>
+    <key>CFBundleIconFile</key>
+    <string>InputLeap.icns</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.johneybi.input-leap-keymap.client</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>Input Leap Keymap</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>$version</string>
+    <key>CFBundleVersion</key>
+    <string>$version</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>11.0</string>
+    <key>LSUIElement</key>
+    <true/>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>Connect to an Input Leap server on the local network.</string>
+</dict>
+</plist>
+EOF
+
+codesign --force --deep --sign - "$app"
+codesign --verify --deep --strict --verbose=2 "$app"
