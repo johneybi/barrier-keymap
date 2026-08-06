@@ -11,6 +11,7 @@ binary="$1"
 app="$2"
 contents="$app/Contents"
 version="${INPUTLEAP_KEYMAP_VERSION:-3.0.3}"
+bundle_id="com.johneybi.input-leap-keymap.client"
 
 rm -rf "$app"
 mkdir -p "$contents/MacOS" "$contents/Resources"
@@ -31,7 +32,7 @@ cat > "$contents/Info.plist" <<EOF
     <key>CFBundleIconFile</key>
     <string>InputLeap.icns</string>
     <key>CFBundleIdentifier</key>
-    <string>com.johneybi.input-leap-keymap.client</string>
+    <string>$bundle_id</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
@@ -54,5 +55,12 @@ cat > "$contents/Info.plist" <<EOF
 </plist>
 EOF
 
-codesign --force --deep --sign - "$app"
+# Keep the designated requirement stable across ad-hoc beta builds. Without an
+# explicit requirement, codesign falls back to the changing binary cdhash and
+# macOS can invalidate the app's Accessibility permission after an update.
+codesign --force --deep --sign - \
+    --identifier "$bundle_id" \
+    --requirements "=designated => identifier \"$bundle_id\"" \
+    "$app"
 codesign --verify --deep --strict --verbose=2 "$app"
+codesign -d -r- "$app" 2>&1 | grep -F "identifier \"$bundle_id\"" >/dev/null

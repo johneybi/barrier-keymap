@@ -23,10 +23,22 @@ cp -R "Input Leap Keymap.app" /Applications/
 xattr -dr com.apple.quarantine "/Applications/Input Leap Keymap.app"
 codesign --verify --deep --strict --verbose=2 \
   "/Applications/Input Leap Keymap.app"
+codesign -d -r- "/Applications/Input Leap Keymap.app" 2>&1
 ```
 
 Keep the application path and bundle identifier stable so macOS Accessibility
 permission remains associated with the client.
+
+Beta packages use a stable ad-hoc designated requirement. The final command
+above must report:
+
+```text
+designated => identifier "com.johneybi.input-leap-keymap.client"
+```
+
+Packages made before this requirement was added were identified only by their
+changing binary cdhash. After replacing one of those older packages, remove
+the stale Accessibility entry, add `Input Leap Keymap` again, and grant it once.
 
 ## Permissions
 
@@ -55,6 +67,11 @@ mkdir -p "$HOME/Library/Logs/InputLeapKeymap"
 
 The Windows server configuration contains only the client name
 `ESKui-MacBookPro`, without a `.local` suffix.
+
+The current beta bundle contains the command-line client, not a persistent GUI
+launcher. Keep this Terminal command running; closing its Terminal tab stops
+the client. Do not attach it to a background LaunchAgent yet, because the
+client needs to create its Quartz event tap in an interactive GUI session.
 
 ## Current Windows state
 

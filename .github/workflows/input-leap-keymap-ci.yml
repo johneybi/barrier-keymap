@@ -127,6 +127,8 @@ jobs:
               build/bin/input-leapc "Input Leap Keymap.app"
           test "$(lipo -archs build/bin/input-leapc)" = "arm64"
           file build/bin/input-leapc
+          codesign -d -r- "Input Leap Keymap.app" 2>&1 | \
+            grep -F 'designated => identifier "com.johneybi.input-leap-keymap.client"'
           if [[ "$(uname -m)" == "arm64" ]]; then
             set +e
             version_output="$(build/bin/input-leapc --version 127.0.0.1 2>&1)"
