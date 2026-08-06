@@ -37,6 +37,8 @@
 
 namespace inputleap {
 
+static const double kMaxMouseCompressionDelay = 0.008;
+
 ServerProxy::ServerProxy(Client* client, inputleap::IStream* stream, IEventQueue* events) :
     m_client(client),
     m_stream(stream),
@@ -50,6 +52,15 @@ ServerProxy::ServerProxy(Client* client, inputleap::IStream* stream, IEventQueue
     m_ignoreMouse(false),
     m_keepAliveAlarm(0.0),
     m_keepAliveAlarmTimer(nullptr),
+    m_diagEnterCount(0),
+    m_diagLeaveCount(0),
+    m_diagKeyCount(0),
+    m_diagMouseMoveCount(0),
+    m_diagMouseMoveForwardedCount(0),
+    m_diagMouseMoveCompressedCount(0),
+    m_diagMouseRelMoveCount(0),
+    m_diagLastMouseX(0),
+    m_diagLastMouseY(0),
     m_parser(&ServerProxy::parseHandshakeMessage),
     m_events(events)
 {
@@ -75,6 +86,35 @@ ServerProxy::~ServerProxy()
     setKeepAliveRate(-1.0);
     m_events->remove_handler(EventType::STREAM_INPUT_READY, m_stream->get_event_target());
     m_events->remove_handler(EventType::CLIPBOARD_SENDING, this);
+}
+
+void ServerProxy::logProtocolHealth()
+{
+    const double elapsed = m_protocolHealthTimer.getTime();
+    if (elapsed < 1.0) {
+        return;
+    }
+
+    const std::uint32_t total = m_diagEnterCount + m_diagLeaveCount +
+        m_diagKeyCount + m_diagMouseMoveCount + m_diagMouseRelMoveCount;
+    if (total != 0) {
+        LOG_INFO(
+            "protocol health %.2fs: enter=%u leave=%u key=%u mouse=%u "
+            "forwarded=%u compressed=%u rel=%u last=%d,%d seq=%u",
+            elapsed, m_diagEnterCount, m_diagLeaveCount, m_diagKeyCount,
+            m_diagMouseMoveCount, m_diagMouseMoveForwardedCount,
+            m_diagMouseMoveCompressedCount, m_diagMouseRelMoveCount,
+            m_diagLastMouseX, m_diagLastMouseY, m_seqNum);
+    }
+
+    m_diagEnterCount = 0;
+    m_diagLeaveCount = 0;
+    m_diagKeyCount = 0;
+    m_diagMouseMoveCount = 0;
+    m_diagMouseMoveForwardedCount = 0;
+    m_diagMouseMoveCompressedCount = 0;
+    m_diagMouseRelMoveCount = 0;
+    m_protocolHealthTimer.reset();
 }
 
 void
@@ -372,13 +412,16 @@ ServerProxy::flushCompressedMouse()
 {
     if (m_compressMouse) {
         m_compressMouse = false;
+        ++m_diagMouseMoveForwardedCount;
         m_client->mouseMove(m_xMouse, m_yMouse);
+        m_mouseFlushTimer.reset();
     }
     if (m_compressMouseRelative) {
         m_compressMouseRelative = false;
         m_client->mouseRelativeMove(m_dxMouse, m_dyMouse);
         m_dxMouse = 0;
         m_dyMouse = 0;
+        m_mouseFlushTimer.reset();
     }
 }
 
@@ -522,6 +565,10 @@ ServerProxy::enter()
     std::uint16_t mask;
     std::uint32_t seqNum;
     ProtocolUtil::readf(m_stream, kMsgCEnter + 4, &x, &y, &seqNum, &mask);
+    ++m_diagEnterCount;
+    m_diagLastMouseX = x;
+    m_diagLastMouseY = y;
+    logProtocolHealth();
     LOG_DEBUG1("recv enter, %d,%d %d %04x", x, y, seqNum, mask);
 
     // discard old compressed mouse motion, if any
@@ -539,6 +586,8 @@ void
 ServerProxy::leave()
 {
     // parse
+    ++m_diagLeaveCount;
+    logProtocolHealth();
     LOG_DEBUG1("recv leave");
 
     // send last mouse motion
@@ -601,6 +650,8 @@ ServerProxy::keyDown()
     // parse
     std::uint16_t id, mask, button;
     ProtocolUtil::readf(m_stream, kMsgDKeyDown + 4, &id, &mask, &button);
+    ++m_diagKeyCount;
+    logProtocolHealth();
     LOG_DEBUG1("recv key down id=0x%08x, mask=0x%04x, button=0x%04x", id, mask, button);
 
     // translate
@@ -625,6 +676,8 @@ ServerProxy::keyRepeat()
     std::uint16_t id, mask, count, button;
     ProtocolUtil::readf(m_stream, kMsgDKeyRepeat + 4,
                                 &id, &mask, &count, &button);
+    ++m_diagKeyCount;
+    logProtocolHealth();
     LOG_DEBUG1("recv key repeat id=0x%08x, mask=0x%04x, count=%d, button=0x%04x", id, mask, count, button);
 
     // translate
@@ -648,6 +701,8 @@ ServerProxy::keyUp()
     // parse
     std::uint16_t id, mask, button;
     ProtocolUtil::readf(m_stream, kMsgDKeyUp + 4, &id, &mask, &button);
+    ++m_diagKeyCount;
+    logProtocolHealth();
     LOG_DEBUG1("recv key up id=0x%08x, mask=0x%04x, button=0x%04x", id, mask, button);
 
     // translate
@@ -699,6 +754,9 @@ ServerProxy::mouseMove()
     bool ignore;
     std::int16_t x, y;
     ProtocolUtil::readf(m_stream, kMsgDMouseMove + 4, &x, &y);
+    ++m_diagMouseMoveCount;
+    m_diagLastMouseX = x;
+    m_diagLastMouseY = y;
 
     // note if we should ignore the move
     ignore = m_ignoreMouse;
@@ -710,19 +768,26 @@ ServerProxy::mouseMove()
 
     // if compressing then ignore the motion but record it
     if (m_compressMouse) {
+        ++m_diagMouseMoveCompressedCount;
         m_compressMouseRelative = false;
         ignore    = true;
         m_xMouse  = x;
         m_yMouse  = y;
         m_dxMouse = 0;
         m_dyMouse = 0;
+        if (m_mouseFlushTimer.getTime() >= kMaxMouseCompressionDelay) {
+            flushCompressedMouse();
+        }
     }
     LOG_DEBUG2("recv mouse move %d,%d", x, y);
 
     // forward
     if (!ignore) {
+        ++m_diagMouseMoveForwardedCount;
         m_client->mouseMove(x, y);
+        m_mouseFlushTimer.reset();
     }
+    logProtocolHealth();
 }
 
 void
@@ -732,6 +797,7 @@ ServerProxy::mouseRelativeMove()
     bool ignore;
     std::int16_t dx, dy;
     ProtocolUtil::readf(m_stream, kMsgDMouseRelMove + 4, &dx, &dy);
+    ++m_diagMouseRelMoveCount;
 
     // note if we should ignore the move
     ignore = m_ignoreMouse;
@@ -746,13 +812,18 @@ ServerProxy::mouseRelativeMove()
         ignore     = true;
         m_dxMouse += dx;
         m_dyMouse += dy;
+        if (m_mouseFlushTimer.getTime() >= kMaxMouseCompressionDelay) {
+            flushCompressedMouse();
+        }
     }
     LOG_DEBUG2("recv mouse relative move %d,%d", dx, dy);
 
     // forward
     if (!ignore) {
         m_client->mouseRelativeMove(dx, dy);
+        m_mouseFlushTimer.reset();
     }
+    logProtocolHealth();
 }
 
 void

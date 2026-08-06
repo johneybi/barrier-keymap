@@ -44,6 +44,11 @@ const inputleap::KeyMap::KeyItem* stubMapKey(inputleap::KeyMap::Keystrokes& keys
                                              KeyModifierMask& currentState,
                                              KeyModifierMask desiredMask, bool isAutoRepeat);
 
+const inputleap::KeyMap::KeyItem* stubMapGroupKey(
+    inputleap::KeyMap::Keystrokes& keys, KeyID id, std::int32_t group,
+    inputleap::KeyMap::ModifierToKeys& activeModifiers,
+    KeyModifierMask& currentState, KeyModifierMask desiredMask, bool isAutoRepeat);
+
 inputleap::KeyMap::Keystroke s_stubKeystroke(1, false, false);
 inputleap::KeyMap::KeyItem s_stubKeyItem;
 
@@ -245,6 +250,18 @@ TEST(KeyStateTests, fakeKeyDown_mapReturnsKeystrokes_fakeKeyCalled)
     keyState.fakeKeyDown(1, 0, 0);
 }
 
+TEST(KeyStateTests, fakeKeyDown_nextGroup_executesGroupKeystroke)
+{
+    NiceMock<MockKeyMap> keyMap;
+    MockEventQueue eventQueue;
+    KeyStateImpl keyState(eventQueue, keyMap);
+    ON_CALL(keyMap, mapKey(_, _, _, _, _, _, _)).WillByDefault(Invoke(stubMapGroupKey));
+
+    EXPECT_CALL(keyState, fakeKey(_)).Times(1);
+
+    keyState.fakeKeyDown(kKeyNextGroup, 0, 1);
+}
+
 TEST(KeyStateTests, fakeKeyRepeat_invalidKey_returnsFalse)
 {
     MockKeyMap keyMap;
@@ -431,6 +448,22 @@ const inputleap::KeyMap::KeyItem* stubMapKey(inputleap::KeyMap::Keystrokes& keys
 
     keys.push_back(s_stubKeystroke);
     return &s_stubKeyItem;
+}
+
+const inputleap::KeyMap::KeyItem* stubMapGroupKey(
+    inputleap::KeyMap::Keystrokes& keys, KeyID id, std::int32_t group,
+    inputleap::KeyMap::ModifierToKeys& activeModifiers,
+    KeyModifierMask& currentState, KeyModifierMask desiredMask, bool isAutoRepeat)
+{
+    (void) id;
+    (void) group;
+    (void) activeModifiers;
+    (void) currentState;
+    (void) desiredMask;
+    (void) isAutoRepeat;
+
+    keys.push_back(inputleap::KeyMap::Keystroke(1, false, false));
+    return nullptr;
 }
 
 } // namespace inputleap

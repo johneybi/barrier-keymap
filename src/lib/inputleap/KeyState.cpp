@@ -566,6 +566,11 @@ KeyState::fakeKeyDown(KeyID id, KeyModifierMask mask, KeyButton serverID)
         m_keyMap.mapKey(keys, id, pollActiveGroup(), m_activeModifiers,
                                 getActiveModifiersRValue(), mask, false);
     if (keyItem == nullptr) {
+        if ((id == kKeyNextGroup || id == kKeyPrevGroup) && !keys.empty()) {
+            fakeKeys(keys, 1);
+            return;
+        }
+
         // a media key won't be mapped on mac, so we need to fake it in a
         // special way
         if (id == kKeyAudioDown || id == kKeyAudioUp ||

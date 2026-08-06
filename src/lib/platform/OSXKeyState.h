@@ -24,6 +24,7 @@
 
 #include <map>
 #include <set>
+#include <string>
 #include <vector>
 
 namespace inputleap {
@@ -121,6 +122,9 @@ private:
     // Change active keyboard group to group
     void setGroup(std::int32_t group);
 
+    // Cycle through enabled, selectable macOS input sources.
+    void cycleInputSource(std::int32_t offset);
+
     // Check if the keyboard layout has changed and update keyboard state
     // if so.
     void checkKeyboardLayout();
@@ -162,7 +166,7 @@ private:
         KeyButtonOffset = 1
     };
 
-    typedef std::map<CFDataRef, std::int32_t> GroupMap;
+    typedef std::map<std::string, std::int32_t> GroupMap;
     typedef std::map<std::uint32_t, KeyID> VirtualKeyMap;
 
     VirtualKeyMap m_virtualKeyMap;

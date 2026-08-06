@@ -22,6 +22,8 @@
 #include "base/IEventQueueBuffer.h"
 
 #include <Carbon/Carbon.h>
+#include <deque>
+#include <mutex>
 
 namespace inputleap {
 
@@ -39,9 +41,15 @@ public:
     virtual bool isEmpty() const;
 
 private:
+    bool popUserEvent(std::uint32_t& dataID);
+    bool removeUserEvent(std::uint32_t dataID);
+    bool hasUserEvent() const;
+
     EventRef m_event;
     IEventQueue* m_eventQueue;
     EventQueueRef m_carbonEventQueue;
+    mutable std::mutex m_userEventMutex;
+    std::deque<std::uint32_t> m_userEvents;
 };
 
 } // namespace inputleap

@@ -24,6 +24,7 @@
 #include "base/Fwd.h"
 #include "base/Event.h"
 #include "base/EventTarget.h"
+#include "base/Stopwatch.h"
 
 namespace inputleap {
 
@@ -107,6 +108,7 @@ private:
     void fileChunkReceived();
     void dragInfoReceived();
     void handle_clipboard_sending_event(const Event&);
+    void logProtocolHealth();
 
 private:
     typedef EResult (ServerProxy::*MessageParser)(const std::uint8_t*);
@@ -120,6 +122,7 @@ private:
     bool m_compressMouseRelative;
     std::int32_t m_xMouse, m_yMouse;
     std::int32_t m_dxMouse, m_dyMouse;
+    Stopwatch m_mouseFlushTimer;
 
     bool m_ignoreMouse;
 
@@ -127,6 +130,17 @@ private:
 
     double m_keepAliveAlarm;
     EventQueueTimer* m_keepAliveAlarmTimer;
+
+    Stopwatch m_protocolHealthTimer;
+    std::uint32_t m_diagEnterCount;
+    std::uint32_t m_diagLeaveCount;
+    std::uint32_t m_diagKeyCount;
+    std::uint32_t m_diagMouseMoveCount;
+    std::uint32_t m_diagMouseMoveForwardedCount;
+    std::uint32_t m_diagMouseMoveCompressedCount;
+    std::uint32_t m_diagMouseRelMoveCount;
+    std::int32_t m_diagLastMouseX;
+    std::int32_t m_diagLastMouseY;
 
     MessageParser m_parser;
     IEventQueue* m_events;

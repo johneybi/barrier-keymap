@@ -38,6 +38,25 @@ static const std::uint32_t s_osxNumLock = 1 << 16;
 static const std::uint32_t s_int4VK = 0x8a; // international4
 static const std::uint32_t s_int5VK = 0x8b; // international5
 
+static std::string getInputSourceString(TISInputSourceRef source, CFStringRef property)
+{
+    if (source == nullptr) {
+        return "<none>";
+    }
+
+    CFStringRef value = static_cast<CFStringRef>(
+        TISGetInputSourceProperty(source, property));
+    if (value == nullptr) {
+        return "<unknown>";
+    }
+
+    char buffer[512];
+    if (!CFStringGetCString(value, buffer, sizeof(buffer), kCFStringEncodingUTF8)) {
+        return "<unprintable>";
+    }
+    return buffer;
+}
+
 struct KeyEntry {
 public:
     KeyID                m_keyID;
@@ -393,16 +412,23 @@ OSXKeyState::pollActiveModifiers() const
 
 std::int32_t OSXKeyState::pollActiveGroup() const
 {
-    TISInputSourceRef keyboardLayout = TISCopyCurrentKeyboardLayoutInputSource();
-    CFDataRef id = (CFDataRef)TISGetInputSourceProperty(
-                        keyboardLayout, kTISPropertyInputSourceID);
+    TISInputSourceRef inputSource = TISCopyCurrentKeyboardLayoutInputSource();
+    const std::string id = getInputSourceString(
+        inputSource, kTISPropertyInputSourceID);
 
     auto i = m_groupMap.find(id);
     if (i != m_groupMap.end()) {
+        LOG_DEBUG1("active macOS keyboard layout id=%s group=%d",
+                   id.c_str(), i->second);
+        CFRelease(inputSource);
         return i->second;
     }
 
-    LOG_DEBUG("can't get the active group, use the first group instead");
+    LOG_DEBUG("can't map active macOS keyboard layout id=%s, use first group",
+              id.c_str());
+    if (inputSource != nullptr) {
+        CFRelease(inputSource);
+    }
 
     return 0;
 }
@@ -430,9 +456,13 @@ OSXKeyState::getKeyMap(inputleap::KeyMap& keyMap)
         m_groupMap.clear();
         std::int32_t numGroups = (std::int32_t)m_groups.size();
         for (std::int32_t g = 0; g < numGroups; ++g) {
-            CFDataRef id = (CFDataRef)TISGetInputSourceProperty(
-                                m_groups[g], kTISPropertyInputSourceID);
+            const std::string id = getInputSourceString(
+                m_groups[g], kTISPropertyInputSourceID);
             m_groupMap[id] = g;
+            LOG_DEBUG1("macOS input source group=%d id=%s name=%s",
+                       g, id.c_str(),
+                       getInputSourceString(
+                           m_groups[g], kTISPropertyLocalizedName).c_str());
         }
     }
 
@@ -610,8 +640,8 @@ OSXKeyState::fakeKey(const Keystroke& keystroke)
             setGroup(group);
         }
         else {
-            LOG_DEBUG1("  group %+d", group);
-            setGroup(getEffectiveGroup(pollActiveGroup(), group));
+            LOG_DEBUG1("  input source %+d", group);
+            cycleInputSource(group);
         }
         break;
     }
@@ -862,19 +892,101 @@ OSXKeyState::getGroups(GroupList& groups) const
     // get each layout
     groups.clear();
     for (CFIndex i = 0; i < n; ++i) {
-        bool addToGroups = true;
         TISInputSourceRef keyboardLayout =
             (TISInputSourceRef)CFArrayGetValueAtIndex(kbds, i);
 
-        if (addToGroups)
+        const bool hasKeyLayout = TISGetInputSourceProperty(
+            keyboardLayout, kTISPropertyUnicodeKeyLayoutData) != nullptr;
+        LOG_DEBUG1("macOS keyboard layout candidate id=%s name=%s keymap=%s",
+                   getInputSourceString(
+                       keyboardLayout, kTISPropertyInputSourceID).c_str(),
+                   getInputSourceString(
+                       keyboardLayout, kTISPropertyLocalizedName).c_str(),
+                   hasKeyLayout ? "yes" : "no");
+
+        if (hasKeyLayout) {
             groups.push_back(keyboardLayout);
+        }
     }
     return true;
 }
 
 void OSXKeyState::setGroup(std::int32_t group)
 {
-    TISSetInputMethodKeyboardLayoutOverride(m_groups[group]);
+    if (group < 0 || group >= static_cast<std::int32_t>(m_groups.size())) {
+        LOG_ERR("invalid macOS input source group=%d count=%d",
+                group, static_cast<int>(m_groups.size()));
+        return;
+    }
+
+    TISInputSourceRef target = m_groups[group];
+    const std::string targetId = getInputSourceString(
+        target, kTISPropertyInputSourceID);
+    TISSetInputMethodKeyboardLayoutOverride(target);
+
+    LOG_DEBUG1("set macOS keyboard layout group=%d target=%s",
+               group, targetId.c_str());
+}
+
+void OSXKeyState::cycleInputSource(std::int32_t offset)
+{
+    CFStringRef keys[] = { kTISPropertyInputSourceCategory };
+    CFStringRef values[] = { kTISCategoryKeyboardInputSource };
+    CFDictionaryRef filter = CFDictionaryCreate(
+        nullptr, reinterpret_cast<const void **>(keys),
+        reinterpret_cast<const void **>(values), 1, nullptr, nullptr);
+    CFArrayRef sources = TISCreateInputSourceList(filter, false);
+    CFRelease(filter);
+
+    std::vector<TISInputSourceRef> selectableSources;
+    const CFIndex count = CFArrayGetCount(sources);
+    for (CFIndex i = 0; i < count; ++i) {
+        TISInputSourceRef source = static_cast<TISInputSourceRef>(
+            const_cast<void *>(CFArrayGetValueAtIndex(sources, i)));
+        CFBooleanRef selectCapable = static_cast<CFBooleanRef>(
+            TISGetInputSourceProperty(
+                source, kTISPropertyInputSourceIsSelectCapable));
+        if (selectCapable == kCFBooleanTrue) {
+            selectableSources.push_back(source);
+        }
+    }
+
+    if (selectableSources.empty()) {
+        LOG_WARN("no selectable macOS input sources");
+        CFRelease(sources);
+        return;
+    }
+
+    TISInputSourceRef current = TISCopyCurrentKeyboardInputSource();
+    const std::string currentId = getInputSourceString(
+        current, kTISPropertyInputSourceID);
+    std::int32_t currentIndex = 0;
+    for (std::int32_t i = 0;
+         i < static_cast<std::int32_t>(selectableSources.size()); ++i) {
+        if (getInputSourceString(selectableSources[i],
+                                 kTISPropertyInputSourceID) == currentId) {
+            currentIndex = i;
+            break;
+        }
+    }
+
+    const std::int32_t sourceCount =
+        static_cast<std::int32_t>(selectableSources.size());
+    const std::int32_t targetIndex =
+        ((currentIndex + offset) % sourceCount + sourceCount) % sourceCount;
+    TISInputSourceRef target = selectableSources[targetIndex];
+    const std::string targetId = getInputSourceString(
+        target, kTISPropertyInputSourceID);
+    const OSStatus status = TISSelectInputSource(target);
+
+    LOG_DEBUG1("cycle macOS input source offset=%+d current=%s target=%s status=%d",
+               offset, currentId.c_str(), targetId.c_str(),
+               static_cast<int>(status));
+
+    if (current != nullptr) {
+        CFRelease(current);
+    }
+    CFRelease(sources);
 }
 
 void
