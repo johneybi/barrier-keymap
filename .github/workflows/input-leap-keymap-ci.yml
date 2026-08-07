@@ -117,12 +117,13 @@ jobs:
             -DCMAKE_PREFIX_PATH="$(brew --prefix qt@5)" \
             -DQT_DEFAULT_MAJOR_VERSION=5 \
             -DINPUTLEAP_BUILD_GULRAK_FILESYSTEM=ON \
+            -DINPUTLEAP_BUILD_AUDIO_DAEMON=ON \
             -DINPUTLEAP_BUILD_GUI=ON \
             -DINPUTLEAP_BUILD_TESTS=OFF \
             -DINPUTLEAP_VERSION_DESC=git
 
       - name: Build arm64 app
-        run: cmake --build build --target input-leap input-leapc input-leaps --parallel
+        run: cmake --build build --target input-leap input-leapc input-leaps input-leap-audios --parallel
 
       - name: Package and verify arm64 app
         run: |
@@ -132,7 +133,7 @@ jobs:
             dist/macos/package_keymap_gui.sh \
               build/bin/input-leap build/bin/input-leapc \
               build/bin/input-leaps "Input Leap Keymap.app"
-          for binary in input-leap input-leapc input-leaps; do
+          for binary in input-leap input-leapc input-leaps input-leap-audios; do
             test "$(lipo -archs "build/bin/${binary}")" = "arm64"
             file "build/bin/${binary}"
           done
@@ -146,10 +147,14 @@ jobs:
             grep -q "input-leapc 3.0.3" <<< "${version_output}"
           fi
           tar -czf input-leap-keymap-macos-arm64.tar.gz "Input Leap Keymap.app"
+          tar -czf input-leap-keymap-macos-audio-sender-arm64.tar.gz \
+            -C build/bin input-leap-audios
 
       - name: Upload arm64 app
         uses: actions/upload-artifact@v4
         with:
           name: input-leap-keymap-macos-arm64-app
-          path: input-leap-keymap-macos-arm64.tar.gz
+          path: |
+            input-leap-keymap-macos-arm64.tar.gz
+            input-leap-keymap-macos-audio-sender-arm64.tar.gz
           if-no-files-found: error

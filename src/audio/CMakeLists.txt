@@ -1,29 +1,42 @@
-# InputLeap -- separate audio relay process
-
-add_executable(input-leap-audiod
-    AudioReceiver.cpp
-    AudioReceiver.h
-    input-leap-audiod.cpp
-    miniaudio.c
-)
-
-target_compile_features(input-leap-audiod PRIVATE cxx_std_17)
-target_include_directories(input-leap-audiod PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_SOURCE_DIR}/ext/aoo/include
-    ${CMAKE_SOURCE_DIR}/ext/miniaudio
-)
-target_link_libraries(input-leap-audiod PRIVATE audio Aoo::aoo)
-
 if(WIN32)
+    # Windows playback receiver milestone.
+    add_executable(input-leap-audiod
+        AudioReceiver.cpp
+        AudioReceiver.h
+        input-leap-audiod.cpp
+        miniaudio.c
+    )
+    target_compile_features(input-leap-audiod PRIVATE cxx_std_17)
+    target_include_directories(input-leap-audiod PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_SOURCE_DIR}/ext/aoo/include
+        ${CMAKE_SOURCE_DIR}/ext/miniaudio
+    )
+    target_link_libraries(input-leap-audiod PRIVATE audio Aoo::aoo)
     target_link_libraries(input-leap-audiod PRIVATE winmm ole32)
+    install(TARGETS input-leap-audiod DESTINATION bin)
 elseif(APPLE)
-    target_link_libraries(input-leap-audiod PRIVATE
-        "-framework CoreFoundation"
-        "-framework CoreAudio"
-        "-framework AudioToolbox")
-elseif(UNIX)
-    target_link_libraries(input-leap-audiod PRIVATE pthread dl m)
+    # macOS system-audio sender milestone.
+    add_executable(input-leap-audios
+        AudioSender.h
+        AudioSender.mm
+        input-leap-audios.cpp
+    )
+    set_source_files_properties(AudioSender.mm PROPERTIES
+        COMPILE_OPTIONS "-fobjc-arc")
+    target_compile_features(input-leap-audios PRIVATE cxx_std_17)
+    target_compile_options(input-leap-audios PRIVATE
+        "-mmacosx-version-min=13.0")
+    target_link_options(input-leap-audios PRIVATE
+        "-mmacosx-version-min=13.0")
+    target_include_directories(input-leap-audios PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_SOURCE_DIR}/ext/aoo/include
+    )
+    target_link_libraries(input-leap-audios PRIVATE
+        audio Aoo::aoo
+        "-framework ScreenCaptureKit"
+        "-framework CoreMedia"
+        "-framework CoreFoundation")
+    install(TARGETS input-leap-audios DESTINATION bin)
 endif()
-
-install(TARGETS input-leap-audiod DESTINATION bin)

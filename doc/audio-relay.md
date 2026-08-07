@@ -45,8 +45,10 @@ fails, keyboard, mouse, and clipboard sharing must remain connected.
 
 The first executable milestone is a Windows playback-only receiver using AOO.
 It is built as `input-leap-audiod` and is intentionally separate from the
-keyboard/mouse process. The next implementation step is a macOS
-ScreenCaptureKit source and an authenticated pairing handshake.
+keyboard/mouse process. The macOS source is built as `input-leap-audios` and
+uses ScreenCaptureKit to capture system audio. It requires macOS 13 or newer
+and Screen Recording permission. The AOO invitation is accepted automatically
+for this milestone; authenticated pairing is still a follow-up requirement.
 
 ## Build the receiver milestone
 
@@ -64,6 +66,23 @@ Run it on the Windows speaker machine with the Mac source endpoint:
 input-leap-audiod.exe --mode receive --source 192.168.0.40 --source-port 24801
 ```
 
-This milestone opens the default Windows playback device. It does not yet
-capture macOS system audio; that requires the ScreenCaptureKit sender shown in
-the diagram above.
+This milestone opens the default Windows playback device. Build the macOS
+sender with:
+
+```text
+cmake -S . -B build -DINPUTLEAP_BUILD_GUI=OFF -DINPUTLEAP_BUILD_AUDIO_DAEMON=ON
+cmake --build build --target input-leap-audios
+```
+
+Run `input-leap-audios` on the Mac source machine. The Windows receiver should
+use the Mac's address as `--source`, with the same UDP port and source ID:
+
+```text
+input-leap-audios --media-port 24801 --source-id 1
+input-leap-audiod.exe --mode receive --source 192.168.0.40 \
+  --source-port 24801 --media-port 24801 --source-id 1
+```
+
+The receiver sends the AOO invitation; the Mac sender accepts it and begins
+forwarding captured PCM frames. This first connection is not authenticated,
+so it should only be tested on the trusted local network.

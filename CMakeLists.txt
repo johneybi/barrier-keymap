@@ -63,6 +63,39 @@ if(INPUTLEAP_BUILD_AUDIO_DAEMON)
     set(AOO_INSTALL_LIBRARY OFF CACHE BOOL "" FORCE)
     set(AOO_SAMPLE_SIZE 32 CACHE STRING "" FORCE)
     add_subdirectory(ext/aoo EXCLUDE_FROM_ALL)
+    if(APPLE AND TARGET aoo)
+        # AOO adds a Linux-style -lpthread to its Apple static-library link
+        # interface, but macOS provides pthread through libSystem and does
+        # not ship a standalone libpthread to link against.
+        get_target_property(_aoo_link_libraries aoo LINK_LIBRARIES)
+        if(_aoo_link_libraries)
+            list(FILTER _aoo_link_libraries EXCLUDE REGEX "pthread")
+            set_target_properties(aoo PROPERTIES
+                LINK_LIBRARIES "${_aoo_link_libraries}")
+        endif()
+        get_target_property(_aoo_interface_links aoo INTERFACE_LINK_LIBRARIES)
+        if(_aoo_interface_links)
+            list(FILTER _aoo_interface_links EXCLUDE REGEX "pthread|^m$")
+            set_target_properties(aoo PROPERTIES
+                INTERFACE_LINK_LIBRARIES "${_aoo_interface_links}")
+        endif()
+        # Opus similarly records libm as a private static-library dependency;
+        # math functions are provided by libSystem on macOS.
+        if(TARGET opus)
+            get_target_property(_opus_link_libraries opus LINK_LIBRARIES)
+            if(_opus_link_libraries)
+                list(FILTER _opus_link_libraries EXCLUDE REGEX "^m$")
+                set_target_properties(opus PROPERTIES
+                    LINK_LIBRARIES "${_opus_link_libraries}")
+            endif()
+            get_target_property(_opus_interface_links opus INTERFACE_LINK_LIBRARIES)
+            if(_opus_interface_links)
+                list(FILTER _opus_interface_links EXCLUDE REGEX "m")
+                set_target_properties(opus PROPERTIES
+                    INTERFACE_LINK_LIBRARIES "${_opus_interface_links}")
+            endif()
+        endif()
+    endif()
 endif()
 
 # TODO: Find out why we need these, and remove them
