@@ -1,5 +1,24 @@
+diff --git a/aoo/src/net/client.cpp b/aoo/src/net/client.cpp
+index 3bc2480..ce6f837 100644
+--- a/aoo/src/net/client.cpp
++++ b/aoo/src/net/client.cpp
+@@ -2162,13 +2162,12 @@ AooError udp_client::setup(Client& client, AooClientSettings& settings) {
+         udp_server_.set_receive_buffer_size(recvbufsize);
+ 
+         try {
+-            // TODO: honor socket flags! For now, just use default.
+             udp_server_.start(settings.portNumber,
+                     [&client](const AooByte *data, AooSize size, const aoo::ip_address& addr){
+                 // TODO: error handling?
+                 client.handlePacket(data, size, addr.address(), addr.length());
+ 
+-            });
++            }, false, type);
+         } catch (const udp_error& e) {
+             LOG_ERROR("AooClient: failed to start UDP socket: " << e.what());
+             socket::set_last_error(e.code());
 diff --git a/aoo/src/net/client.hpp b/aoo/src/net/client.hpp
-index 1e25897..eb4275d 100644
+index 1e25897..0f92101 100644
 --- a/aoo/src/net/client.hpp
 +++ b/aoo/src/net/client.hpp
 @@ -22,6 +22,8 @@
@@ -24,3 +43,45 @@ index 1e25897..eb4275d 100644
              socket::set_last_error(e.code());
              return -1;
          }
+diff --git a/aoo/src/net/udp_server.cpp b/aoo/src/net/udp_server.cpp
+index 0d1de29..a58107f 100644
+--- a/aoo/src/net/udp_server.cpp
++++ b/aoo/src/net/udp_server.cpp
+@@ -5,7 +5,8 @@
+ 
+ namespace aoo {
+ 
+-void udp_server::start(int port, receive_handler receive, bool threaded) {
++void udp_server::start(int port, receive_handler receive, bool threaded,
++                       AooSocketFlags socket_type) {
+     do_close();
+ 
+     receive_handler_ = std::move(receive);
+@@ -16,7 +17,12 @@ void udp_server::start(int port, receive_handler receive, bool threaded) {
+     // and join the network thread.
+     // TODO: figure out if some operating systems let UDP sockets linger.
+     try {
+-        socket_ = udp_socket(port_tag{}, port, false);
++        if (socket_type == kAooSocketIPv4) {
++            socket_ = udp_socket(
++                ip_address(port, ip_address::IPv4), false);
++        } else {
++            socket_ = udp_socket(port_tag{}, port, false);
++        }
+         bind_addr_ = socket_.address();
+     } catch (const socket_error& e) {
+         throw udp_error(e);
+diff --git a/aoo/src/net/udp_server.hpp b/aoo/src/net/udp_server.hpp
+index 1261544..4b106ea 100644
+--- a/aoo/src/net/udp_server.hpp
++++ b/aoo/src/net/udp_server.hpp
+@@ -55,7 +55,8 @@ public:
+         receive_buffer_size_ = size;
+     }
+ 
+-    void start(int port, receive_handler receive, bool threaded = false);
++    void start(int port, receive_handler receive, bool threaded = false,
++               AooSocketFlags socket_type = kAooSocketDefault);
+     bool run(double timeout = -1);
+     bool running() const { return running_.load(std::memory_order_relaxed); }
+     void stop();

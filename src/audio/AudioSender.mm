@@ -153,6 +153,7 @@ bool AudioSenderImpl::setup_network()
         kAooEventModeCallback);
 
     AooClientSettings settings;
+    settings.socketType = kAooSocketIPv4;
     settings.portNumber = m_config.media_port;
     if (m_client->setup(settings) != kAooOk) {
         std::cerr << "audio: could not bind AOO media port "
