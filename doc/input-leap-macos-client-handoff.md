@@ -140,3 +140,23 @@ is on the Mac:
 
 The Mac client log should remain connected without repeated enter/leave or
 keep-alive failures.
+
+## Immediate screen-switch bounce guard
+
+The macOS client log can show a rapid `enter`/`leave` pair even while the
+connection and mouse event rate remain healthy. In this case the Windows server
+has interpreted a stale opposite-direction delta immediately after crossing an
+edge and switched straight back to the screen the pointer just left.
+
+The server now ignores only a return to the immediately previous screen during
+the first 250 ms after a switch. It does not delay entry, block another screen,
+or prevent an intentional return after that interval. At `DEBUG1`, a suppressed
+event is logged as:
+
+```text
+ignoring immediate switch back to "<screen-name>"
+```
+
+After rebuilding the Windows server, repeatedly enter the Mac at different
+speeds and confirm that it stays there. Also confirm that moving deliberately
+back to Windows after a short pause still works normally.

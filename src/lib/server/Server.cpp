@@ -57,6 +57,7 @@ namespace inputleap {
 namespace {
 
 constexpr double kKeyRemapTapHoldDelay = 0.20;
+constexpr double kImmediateSwitchBackDelay = 0.25;
 
 void relay_key_events(BaseClientProxy* client, const KeyRemapper::KeyEventList& events)
 {
@@ -98,6 +99,7 @@ Server::Server(
 	m_activeSaver(nullptr),
 	m_switchDir(kNoDirection),
 	m_switchScreen(nullptr),
+	m_lastSwitchSource(),
 	m_switchWaitDelay(0.0),
 	m_switchWaitTimer(nullptr),
 	m_switchTwoTapDelay(0.0),
@@ -481,6 +483,8 @@ void Server::switchScreen(BaseClientProxy* dst, std::int32_t x, std::int32_t y, 
 		}
 
 		// cut over
+		m_lastSwitchSource = old_active_name;
+		m_lastSwitchTimer.reset();
 		m_active = dst;
 
 		// increment enter sequence number
@@ -795,6 +799,17 @@ bool Server::isSwitchOkay(BaseClientProxy* newScreen, EDirection dir, std::int32
 		// there's no neighbor.  we don't want to switch and we don't
 		// want to try to switch later.
 		LOG_DEBUG1("no neighbor %s", Config::dirName(dir));
+		stopSwitch();
+		return false;
+	}
+
+	// Win32 low-level hooks can emit a stale delta opposite to the real
+	// movement immediately after crossing an edge. Do not let that single
+	// delta bounce the cursor straight back to the screen it just left.
+	if (!m_lastSwitchSource.empty() &&
+		getName(newScreen) == m_lastSwitchSource &&
+		m_lastSwitchTimer.getTime() < kImmediateSwitchBackDelay) {
+		LOG_DEBUG1("ignoring immediate switch back to \"%s\"", m_lastSwitchSource.c_str());
 		stopSwitch();
 		return false;
 	}

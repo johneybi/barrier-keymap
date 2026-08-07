@@ -441,6 +441,8 @@ private:
     // trying to reach the same screen in the same direction.
     EDirection m_switchDir;
     BaseClientProxy* m_switchScreen;
+    std::string m_lastSwitchSource;
+    Stopwatch m_lastSwitchTimer;
 
     // state for delayed screen switching
     double m_switchWaitDelay;
