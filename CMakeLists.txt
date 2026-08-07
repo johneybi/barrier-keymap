@@ -49,6 +49,12 @@ include (cmake/Version.cmake)
 include (cmake/Package.cmake)
 
 if(INPUTLEAP_BUILD_AUDIO_DAEMON)
+    # AOO currently embeds an Opus CMake project that predates CMake 4's
+    # policy compatibility change. Keep the optional audio build usable with
+    # current CMake versions until the dependency updates its minimum.
+    if(CMAKE_VERSION VERSION_GREATER_EQUAL "4.0")
+        set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
+    endif()
     set(AOO_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
     set(AOO_BUILD_TESTS OFF CACHE BOOL "" FORCE)
     set(AOO_BUILD_SERVER OFF CACHE BOOL "" FORCE)

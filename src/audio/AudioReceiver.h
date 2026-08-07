@@ -12,6 +12,7 @@
 
 #include "audio/AudioRelayConfig.h"
 
+#include <aoo.h>
 #include <aoo_client.hpp>
 #include <aoo_sink.hpp>
 

@@ -40,6 +40,7 @@ jobs:
             -D CMAKE_BUILD_TYPE=$env:B_BUILD_TYPE `
             -D INPUTLEAP_BUILD_GUI=OFF `
             -D INPUTLEAP_BUILD_TESTS=ON `
+            -D INPUTLEAP_BUILD_AUDIO_DAEMON=ON `
             -D DNSSD_LIB="${{ steps.bonjour.outputs.path }}\Lib\x64\dnssd.lib"
         env:
           BONJOUR_SDK_HOME: ${{ steps.bonjour.outputs.path }}
@@ -48,7 +49,7 @@ jobs:
         run: cmake --build build --config $env:B_BUILD_TYPE --parallel
 
       - name: Run keymap tests
-        run: build/bin/Release/unittests.exe --gtest_filter=KeyRemapperTests.*
+        run: build/bin/Release/unittests.exe --gtest_filter=KeyRemapperTests.*:AudioRelayConfigTests.*
 
       - name: Smoke test command-line binaries
         shell: pwsh
@@ -68,6 +69,7 @@ jobs:
           path: |
             build/bin/Release/input-leaps.exe
             build/bin/Release/input-leapc.exe
+            build/bin/Release/input-leap-audiod.exe
           if-no-files-found: warn
 
   macos-arm64-app:
