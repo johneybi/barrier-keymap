@@ -1,6 +1,7 @@
 if(WIN32)
     # Windows playback receiver milestone.
     add_executable(input-leap-audiod
+        AudioProcessWait.h
         AudioReceiver.cpp
         AudioReceiver.h
         input-leap-audiod.cpp
@@ -18,6 +19,7 @@ if(WIN32)
 elseif(APPLE)
     # macOS system-audio sender milestone.
     add_executable(input-leap-audios
+        AudioProcessWait.h
         AudioSender.h
         AudioSender.mm
         input-leap-audios.cpp

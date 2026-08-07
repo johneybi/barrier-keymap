@@ -55,8 +55,12 @@ bool AudioReceiver::setup_network()
         return false;
     }
 
-    m_sink->setEventHandler(on_aoo_event, nullptr, kAooEventModeCallback);
-    m_sink->setLatency(m_config.jitter_buffer_ms * 0.001);
+    if (m_sink->setEventHandler(
+            on_aoo_event, nullptr, kAooEventModeCallback) != kAooOk ||
+        m_sink->setLatency(m_config.jitter_buffer_ms * 0.001) != kAooOk) {
+        std::cerr << "audio: could not configure AOO sink events/latency\n";
+        return false;
+    }
 
     AooClientSettings settings;
     settings.socketType = kAooSocketIPv4;
@@ -69,13 +73,16 @@ bool AudioReceiver::setup_network()
 
     if (m_sink->setup(m_config.format.channels,
                      m_config.format.sample_rate,
-                     m_config.format.frame_samples(),
+                     kMaxAudioCallbackFrames,
                      0) != kAooOk) {
         std::cerr << "audio: could not configure AOO sink\n";
         return false;
     }
 
-    m_client->addSink(m_sink.get());
+    if (m_client->addSink(m_sink.get()) != kAooOk) {
+        std::cerr << "audio: could not register AOO sink\n";
+        return false;
+    }
 
     m_source_address_size = sizeof(m_source_address);
     auto resolve_result = aoo_ipEndpointToSockAddr(
@@ -206,16 +213,12 @@ void AudioReceiver::stop()
 
 void AudioReceiver::network_send_loop()
 {
-    while (m_running.load()) {
-        m_client->send(0.1);
-    }
+    m_client->send(kAooInfinite);
 }
 
 void AudioReceiver::network_receive_loop()
 {
-    while (m_running.load()) {
-        m_client->receive(0.1);
-    }
+    m_client->receive(kAooInfinite);
 }
 
 void AudioReceiver::audio_callback(ma_device* device,
@@ -225,7 +228,7 @@ void AudioReceiver::audio_callback(ma_device* device,
 {
     auto* receiver = static_cast<AudioReceiver*>(device->pUserData);
     if (receiver == nullptr || receiver->m_sink == nullptr ||
-        frame_count > 4096) {
+        frame_count > kMaxAudioCallbackFrames) {
         std::memset(output, 0, frame_count * device->playback.channels * sizeof(float));
         return;
     }
@@ -234,7 +237,8 @@ void AudioReceiver::audio_callback(ma_device* device,
     auto* interleaved = static_cast<float*>(output);
     for (std::uint16_t channel = 0; channel < channels; ++channel) {
         receiver->m_channel_pointers[channel] =
-            receiver->m_channel_buffer.data() + channel * 4096;
+            receiver->m_channel_buffer.data() +
+            channel * kMaxAudioCallbackFrames;
     }
 
     receiver->m_sink->process(receiver->m_channel_pointers.data(),

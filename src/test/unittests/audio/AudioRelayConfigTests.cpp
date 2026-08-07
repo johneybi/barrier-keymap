@@ -22,6 +22,7 @@ TEST(AudioRelayConfigTests, defaultConfigIsValid)
     EXPECT_TRUE(config.is_valid(&error));
     EXPECT_TRUE(error.empty());
     EXPECT_EQ(960u, config.format.frame_samples());
+    EXPECT_LT(config.format.frame_samples(), kMaxAudioCallbackFrames);
 }
 
 TEST(AudioRelayConfigTests, inputPortCannotBeUsedForAudio)

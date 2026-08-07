@@ -49,6 +49,35 @@ include (cmake/Version.cmake)
 include (cmake/Package.cmake)
 
 if(INPUTLEAP_BUILD_AUDIO_DAEMON)
+    find_package(Git REQUIRED)
+    set(_aoo_audio_patch
+        "${CMAKE_SOURCE_DIR}/patches/aoo-udp-send-diagnostics.patch")
+    execute_process(
+        COMMAND "${GIT_EXECUTABLE}" -C "${CMAKE_SOURCE_DIR}/ext/aoo"
+            apply --reverse --check --whitespace=nowarn "${_aoo_audio_patch}"
+        RESULT_VARIABLE _aoo_patch_already_applied
+        OUTPUT_QUIET ERROR_QUIET)
+    if(NOT _aoo_patch_already_applied EQUAL 0)
+        execute_process(
+            COMMAND "${GIT_EXECUTABLE}" -C "${CMAKE_SOURCE_DIR}/ext/aoo"
+                apply --check --whitespace=nowarn "${_aoo_audio_patch}"
+            RESULT_VARIABLE _aoo_patch_check
+            OUTPUT_VARIABLE _aoo_patch_check_output
+            ERROR_VARIABLE _aoo_patch_check_error)
+        if(NOT _aoo_patch_check EQUAL 0)
+            message(FATAL_ERROR
+                "Cannot apply the required AOO audio transport patch.\n"
+                "${_aoo_patch_check_output}${_aoo_patch_check_error}")
+        endif()
+        execute_process(
+            COMMAND "${GIT_EXECUTABLE}" -C "${CMAKE_SOURCE_DIR}/ext/aoo"
+                apply --whitespace=nowarn "${_aoo_audio_patch}"
+            RESULT_VARIABLE _aoo_patch_result)
+        if(NOT _aoo_patch_result EQUAL 0)
+            message(FATAL_ERROR "Failed to apply the AOO audio transport patch")
+        endif()
+    endif()
+
     # AOO currently embeds an Opus CMake project that predates CMake 4's
     # policy compatibility change. Keep the optional audio build usable with
     # current CMake versions until the dependency updates its minimum.

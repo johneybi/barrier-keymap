@@ -9,6 +9,7 @@
  */
 
 #include "AudioSender.h"
+#include "AudioProcessWait.h"
 
 #include <cstdlib>
 #include <iostream>
@@ -89,9 +90,8 @@ int main(int argc, char** argv)
         return EXIT_FAILURE;
     }
 
-    std::cout << "audio sender running; press Enter to stop\n";
-    std::string line;
-    std::getline(std::cin, line);
+    std::cout << "audio sender running; press Ctrl+C to stop\n";
+    inputleap::audio::wait_for_audio_shutdown();
     sender.stop();
     return EXIT_SUCCESS;
 }

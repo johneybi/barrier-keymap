@@ -60,6 +60,10 @@ cmake -S . -B build -DINPUTLEAP_BUILD_GUI=OFF -DINPUTLEAP_BUILD_AUDIO_DAEMON=ON
 cmake --build build --target input-leap-audiod
 ```
 
+When the audio target is enabled, CMake verifies and applies the pinned AOO
+IPv4 transport patch before adding the dependency. Re-running CMake is safe;
+an already-applied patch is detected and left unchanged.
+
 Run it on the Windows speaker machine with the Mac source endpoint:
 
 ```text
@@ -86,3 +90,7 @@ input-leap-audiod.exe --mode receive --source 192.168.0.40 \
 The receiver sends the AOO invitation; the Mac sender accepts it and begins
 forwarding captured PCM frames. This first connection is not authenticated,
 so it should only be tested on the trusted local network.
+
+Both commands remain running without an attached standard-input stream and
+stop on `SIGINT`/`SIGTERM` (`Ctrl+C` in an attached terminal), which allows a
+GUI or startup task to supervise them safely.

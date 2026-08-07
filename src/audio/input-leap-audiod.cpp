@@ -9,6 +9,7 @@
  */
 
 #include "AudioReceiver.h"
+#include "AudioProcessWait.h"
 
 #include <aoo.h>
 
@@ -120,9 +121,8 @@ int main(int argc, char** argv)
     }
 
     std::cout << "audio receiver running on UDP " << media_port
-              << "; press Enter to stop\n";
-    std::string line;
-    std::getline(std::cin, line);
+              << "; press Ctrl+C to stop\n";
+    inputleap::audio::wait_for_audio_shutdown();
     receiver.stop();
     return EXIT_SUCCESS;
 }

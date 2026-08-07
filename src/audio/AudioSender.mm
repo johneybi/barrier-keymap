@@ -30,7 +30,6 @@ namespace inputleap {
 namespace audio {
 namespace {
 
-constexpr std::size_t kMaxCaptureFrames = 4096;
 constexpr std::size_t kMaxChannels = 8;
 
 } // namespace
@@ -90,7 +89,7 @@ private:
     std::thread m_send_thread;
     std::thread m_receive_thread;
 
-    std::array<float, kMaxChannels * kMaxCaptureFrames> m_channel_buffer{};
+    std::array<float, kMaxChannels * kMaxAudioCallbackFrames> m_channel_buffer{};
     std::array<AooSample*, kMaxChannels> m_channel_pointers{};
 };
 
@@ -163,7 +162,7 @@ bool AudioSenderImpl::setup_network()
 
     if (m_source->setup(m_config.format.channels,
                         m_config.format.sample_rate,
-                        m_config.format.frame_samples(),
+                        kMaxAudioCallbackFrames,
                         0) != kAooOk) {
         std::cerr << "audio: could not configure AOO source\n";
         return false;
@@ -179,8 +178,12 @@ bool AudioSenderImpl::setup_network()
         std::cerr << "audio: could not configure Opus stream format\n";
         return false;
     }
-    AooSource_setOpusBitrate(
-        m_source.get(), nullptr, m_config.bitrate_kbps * 1000);
+    if (AooSource_setOpusBitrate(
+            m_source.get(), nullptr,
+            m_config.bitrate_kbps * 1000) != kAooOk) {
+        std::cerr << "audio: could not configure Opus bitrate\n";
+        return false;
+    }
 
     if (m_client->addSource(m_source.get()) != kAooOk) {
         std::cerr << "audio: could not register AOO source\n";
@@ -327,7 +330,11 @@ bool AudioSenderImpl::start()
     m_running.store(true);
     m_send_thread = std::thread(&AudioSenderImpl::network_send_loop, this);
     m_receive_thread = std::thread(&AudioSenderImpl::network_receive_loop, this);
-    m_source->startStream(0, nullptr);
+    if (m_source->startStream(0, nullptr) != kAooOk) {
+        std::cerr << "audio: could not start AOO stream\n";
+        stop();
+        return false;
+    }
     if (!start_capture()) {
         stop();
         return false;
@@ -365,16 +372,12 @@ void AudioSenderImpl::stop()
 
 void AudioSenderImpl::network_send_loop()
 {
-    while (m_running.load()) {
-        m_client->send(0.1);
-    }
+    m_client->send(kAooInfinite);
 }
 
 void AudioSenderImpl::network_receive_loop()
 {
-    while (m_running.load()) {
-        m_client->receive(0.1);
-    }
+    m_client->receive(kAooInfinite);
 }
 
 void AudioSenderImpl::handle_stream_error(NSError* error)
@@ -395,7 +398,7 @@ void AudioSenderImpl::handle_sample(CMSampleBufferRef sample_buffer)
 
     const auto frame_count = CMSampleBufferGetNumSamples(sample_buffer);
     const auto channel_count = m_config.format.channels;
-    if (frame_count == 0 || frame_count > kMaxCaptureFrames ||
+    if (frame_count == 0 || frame_count > kMaxAudioCallbackFrames ||
         channel_count == 0 || channel_count > kMaxChannels) {
         return;
     }
@@ -408,8 +411,9 @@ void AudioSenderImpl::handle_sample(CMSampleBufferRef sample_buffer)
         return;
     }
 
-    std::array<std::byte, sizeof(AudioBufferList) +
-                          (kMaxChannels - 1) * sizeof(AudioBuffer)> storage{};
+    alignas(AudioBufferList)
+        std::array<std::byte, sizeof(AudioBufferList) +
+                              (kMaxChannels - 1) * sizeof(AudioBuffer)> storage{};
     auto* audio_buffers = reinterpret_cast<AudioBufferList*>(storage.data());
     audio_buffers->mNumberBuffers = kMaxChannels;
     CMBlockBufferRef block_buffer = nullptr;
@@ -430,7 +434,8 @@ void AudioSenderImpl::handle_sample(CMSampleBufferRef sample_buffer)
 
     for (std::size_t channel = 0; channel < channel_count; ++channel) {
         m_channel_pointers[channel] =
-            m_channel_buffer.data() + channel * kMaxCaptureFrames;
+            m_channel_buffer.data() +
+            channel * kMaxAudioCallbackFrames;
         for (std::size_t frame = 0; frame < frame_count; ++frame) {
             float value = 0.0f;
             if (channel < available_channels) {

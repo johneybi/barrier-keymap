@@ -68,7 +68,7 @@ private:
     std::thread m_send_thread;
     std::thread m_receive_thread;
 
-    std::array<float, 8 * 4096> m_channel_buffer{};
+    std::array<float, 8 * kMaxAudioCallbackFrames> m_channel_buffer{};
     std::array<AooSample*, 8> m_channel_pointers{};
 };
 

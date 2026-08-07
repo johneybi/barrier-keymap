@@ -21,6 +21,7 @@ constexpr std::uint16_t kDefaultChannels = 2;
 constexpr std::uint16_t kDefaultFrameDurationMs = 20;
 constexpr std::uint16_t kDefaultJitterBufferMs = 60;
 constexpr std::uint16_t kDefaultMediaPort = 24801;
+constexpr std::uint16_t kMaxAudioCallbackFrames = 4096;
 
 struct AudioFormat {
     std::uint32_t sample_rate = kDefaultSampleRate;
