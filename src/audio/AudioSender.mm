@@ -134,19 +134,28 @@ bool AudioSenderImpl::setup_network()
             auto* sender = static_cast<AudioSenderImpl*>(user);
             if (event->type == kAooEventInvite) {
                 std::cerr << "audio: accepting sink invitation\n";
-                sender->m_source->handleInvite(event->invite.endpoint,
-                                                event->invite.token,
-                                                kAooTrue);
+                const auto result = sender->m_source->handleInvite(
+                    event->invite.endpoint, event->invite.token, kAooTrue);
+                if (result != kAooOk) {
+                    std::cerr << "audio: could not accept sink invitation: "
+                              << aoo_strerror(result) << "\n";
+                }
             } else if (event->type == kAooEventUninvite) {
-                sender->m_source->handleUninvite(event->uninvite.endpoint,
-                                                 event->uninvite.token,
-                                                 kAooTrue);
+                const auto result = sender->m_source->handleUninvite(
+                    event->uninvite.endpoint, event->uninvite.token, kAooTrue);
+                if (result != kAooOk) {
+                    std::cerr << "audio: could not accept sink uninvite: "
+                              << aoo_strerror(result) << "\n";
+                }
             }
         },
         this,
         kAooEventModeCallback);
 
     AooClientSettings settings;
+    // The relay endpoint is currently an IPv4 LAN address. Keep the socket
+    // family consistent with the receiver's endpoint on macOS.
+    settings.socketType = kAooSocketIPv4;
     settings.portNumber = m_config.media_port;
     if (m_client->setup(settings) != kAooOk) {
         std::cerr << "audio: could not bind AOO media port "

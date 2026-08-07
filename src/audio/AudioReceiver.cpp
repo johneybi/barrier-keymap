@@ -58,6 +58,9 @@ bool AudioReceiver::setup_network()
     m_sink->setLatency(m_config.jitter_buffer_ms * 0.001);
 
     AooClientSettings settings;
+    // The relay endpoint is currently an IPv4 LAN address. Keep the socket
+    // family consistent with the resolved source endpoint on Windows.
+    settings.socketType = kAooSocketIPv4;
     settings.portNumber = m_config.media_port;
     if (m_client->setup(settings) != kAooOk) {
         std::cerr << "audio: could not bind AOO media port "
@@ -144,7 +147,15 @@ bool AudioReceiver::start()
     m_running.store(true);
     m_send_thread = std::thread(&AudioReceiver::network_send_loop, this);
     m_receive_thread = std::thread(&AudioReceiver::network_receive_loop, this);
-    m_sink->inviteSource(m_source_endpoint, nullptr);
+    const auto invite_result = m_sink->inviteSource(m_source_endpoint, nullptr);
+    if (invite_result != kAooOk) {
+        std::cerr << "audio: could not invite source: "
+                  << aoo_strerror(invite_result) << "\n";
+        stop();
+        return false;
+    }
+    std::cerr << "audio: inviting source " << m_source_host << ":"
+              << m_source_port << " id=" << m_source_id << "\n";
     return true;
 }
 
