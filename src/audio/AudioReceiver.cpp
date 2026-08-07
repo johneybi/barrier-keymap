@@ -58,9 +58,6 @@ bool AudioReceiver::setup_network()
     m_sink->setLatency(m_config.jitter_buffer_ms * 0.001);
 
     AooClientSettings settings;
-    // The relay endpoint is currently an IPv4 LAN address. Keep the socket
-    // family consistent with the resolved source endpoint on Windows.
-    settings.socketType = kAooSocketIPv4;
     settings.portNumber = m_config.media_port;
     if (m_client->setup(settings) != kAooOk) {
         std::cerr << "audio: could not bind AOO media port "
@@ -79,11 +76,20 @@ bool AudioReceiver::setup_network()
     m_client->addSink(m_sink.get());
 
     m_source_address_size = sizeof(m_source_address);
-    if (aoo_resolveIpEndpoint(m_source_host.c_str(),
-                              m_source_port,
-                              settings.socketType,
-                              &m_source_address,
-                              &m_source_address_size) != kAooOk) {
+    // AOO's UDP server uses a dual-stack socket on platforms with IPv6.
+    // Build numeric IPv4 targets as IPv4-mapped IPv6 addresses so sendto()
+    // uses the same address family as that socket. Fall back to DNS for
+    // hostnames.
+    auto resolve_result = aoo_ipEndpointToSockAddr(
+        m_source_host.c_str(), m_source_port, kAooSocketDualStack,
+        &m_source_address, &m_source_address_size);
+    if (resolve_result != kAooOk) {
+        m_source_address_size = sizeof(m_source_address);
+        resolve_result = aoo_resolveIpEndpoint(
+            m_source_host.c_str(), m_source_port, settings.socketType,
+            &m_source_address, &m_source_address_size);
+    }
+    if (resolve_result != kAooOk) {
         std::cerr << "audio: could not resolve source " << m_source_host
                   << ":" << m_source_port << "\n";
         return false;
