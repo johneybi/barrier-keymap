@@ -24,6 +24,7 @@ option(INPUTLEAP_USE_EXTERNAL_GTEST "Use external installation of Google Test fr
 option(INPUTLEAP_BUILD_X11 "Build with XWindows support" ON)
 option(INPUTLEAP_BUILD_LIBEI "Build with libei support" OFF)
 option(INPUTLEAP_BUILD_GULRAK_FILESYSTEM "Use internal filesystem library" OFF)
+option(INPUTLEAP_BUILD_AUDIO_DAEMON "Build the separate audio relay process" OFF)
 set (CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set (CMAKE_CXX_EXTENSIONS OFF)
 set (CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -46,6 +47,17 @@ endif()
 
 include (cmake/Version.cmake)
 include (cmake/Package.cmake)
+
+if(INPUTLEAP_BUILD_AUDIO_DAEMON)
+    set(AOO_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(AOO_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+    set(AOO_BUILD_SERVER OFF CACHE BOOL "" FORCE)
+    set(AOO_BUILD_PD_EXTERNAL OFF CACHE BOOL "" FORCE)
+    set(AOO_BUILD_SC_EXTENSION OFF CACHE BOOL "" FORCE)
+    set(AOO_INSTALL_LIBRARY OFF CACHE BOOL "" FORCE)
+    set(AOO_SAMPLE_SIZE 32 CACHE STRING "" FORCE)
+    add_subdirectory(ext/aoo EXCLUDE_FROM_ALL)
+endif()
 
 # TODO: Find out why we need these, and remove them
 if (COMMAND cmake_policy)

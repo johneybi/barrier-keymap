@@ -4,3 +4,9 @@
 [submodule "ext/gulrak-filesystem"]
 	path = ext/gulrak-filesystem
 	url = https://github.com/gulrak/filesystem
+[submodule "ext/aoo"]
+	path = ext/aoo
+	url = https://git.iem.at/cm/aoo.git
+[submodule "ext/miniaudio"]
+	path = ext/miniaudio
+	url = https://github.com/mackron/miniaudio.git

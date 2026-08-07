@@ -22,6 +22,10 @@ add_subdirectory(lib)
 add_subdirectory(client)
 add_subdirectory(server)
 
+if(INPUTLEAP_BUILD_AUDIO_DAEMON)
+    add_subdirectory(audio)
+endif()
+
 if (WIN32)
     add_subdirectory(daemon)
 endif()
