@@ -20,8 +20,11 @@ namespace inputleap {
 namespace audio {
 namespace {
 
-void on_aoo_event(void*, const AooEvent*, AooThreadLevel)
+void on_aoo_event(void*, const AooEvent* event, AooThreadLevel)
 {
+    if (event != nullptr) {
+        std::cerr << "audio: AOO event " << event->type << "\n";
+    }
 }
 
 } // namespace

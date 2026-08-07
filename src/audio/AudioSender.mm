@@ -17,6 +17,7 @@
 #include <aoo.h>
 #include <aoo_client.hpp>
 #include <aoo_source.hpp>
+#include <codec/aoo_opus.h>
 
 #include <array>
 #include <atomic>
@@ -160,6 +161,19 @@ bool AudioSenderImpl::setup_network()
         std::cerr << "audio: could not configure AOO source\n";
         return false;
     }
+
+    AooFormatOpus format;
+    AooFormatOpus_init(&format,
+                       m_config.format.channels,
+                       m_config.format.sample_rate,
+                       m_config.format.frame_samples(),
+                       OPUS_APPLICATION_AUDIO);
+    if (m_source->setFormat(format.header) != kAooOk) {
+        std::cerr << "audio: could not configure Opus stream format\n";
+        return false;
+    }
+    AooSource_setOpusBitrate(
+        m_source.get(), nullptr, m_config.bitrate_kbps * 1000);
 
     if (m_client->addSource(m_source.get()) != kAooOk) {
         std::cerr << "audio: could not register AOO source\n";
