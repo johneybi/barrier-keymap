@@ -12,6 +12,7 @@
 
 #include <aoo.h>
 
+#include <array>
 #include <chrono>
 #include <cstring>
 #include <iostream>
@@ -93,6 +94,19 @@ bool AudioReceiver::setup_network()
         std::cerr << "audio: could not resolve source " << m_source_host
                   << ":" << m_source_port << "\n";
         return false;
+    }
+
+    std::array<AooChar, 64> endpoint_host{};
+    AooSize endpoint_host_size = endpoint_host.size();
+    AooUInt16 endpoint_port = 0;
+    AooSocketFlags endpoint_type = kAooSocketDefault;
+    if (aoo_sockAddrToIpEndpoint(
+            &m_source_address, m_source_address_size,
+            endpoint_host.data(), &endpoint_host_size,
+            &endpoint_port, &endpoint_type) == kAooOk) {
+        std::cerr << "audio: resolved source endpoint " << endpoint_host.data()
+                  << ":" << endpoint_port
+                  << " socket-flags=" << endpoint_type << "\n";
     }
 
     m_source_endpoint.address = &m_source_address;

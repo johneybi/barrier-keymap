@@ -1,0 +1,26 @@
+diff --git a/aoo/src/net/client.hpp b/aoo/src/net/client.hpp
+index 1e25897..eb4275d 100644
+--- a/aoo/src/net/client.hpp
++++ b/aoo/src/net/client.hpp
+@@ -22,6 +22,8 @@
+ #include "osc/OscOutboundPacketStream.h"
+ #include "osc/OscReceivedElements.h"
+ 
++#include <cstdio>
++
+ // these settings are used to maintain th TCP connection
+ // to the AOO server.
+ #ifndef AOO_CLIENT_SERVER_PING_INTERVAL
+@@ -145,6 +147,12 @@ public:
+         try {
+             return server.send(addr, data, size);
+         } catch (const socket_error& e) {
++            std::fprintf(stderr,
++                         "AOO UDP sendto failed: %s (%d), target=%s:%u, bytes=%d\n",
++                         e.what(), e.code(), addr.name(),
++                         static_cast<unsigned>(addr.port()),
++                         static_cast<int>(size));
++            std::fflush(stderr);
+             socket::set_last_error(e.code());
+             return -1;
+         }
