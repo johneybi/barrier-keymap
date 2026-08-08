@@ -20,6 +20,8 @@ elseif(APPLE)
     # macOS system-audio sender milestone.
     add_executable(input-leap-audios
         AudioProcessWait.h
+        MacAudioCapture.h
+        MacAudioCapture.mm
         AudioSender.h
         AudioSender.mm
         input-leap-audios.cpp
@@ -37,6 +39,8 @@ elseif(APPLE)
     )
     target_link_libraries(input-leap-audios PRIVATE
         audio Aoo::aoo
+        "-framework AudioToolbox"
+        "-framework CoreAudio"
         "-framework ScreenCaptureKit"
         "-framework CoreMedia"
         "-framework CoreFoundation")

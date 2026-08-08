@@ -69,6 +69,12 @@ have been recorded.
 - Make the virtual-device path explicit, for example
   `--capture-mode device --audio-device-uid UID`.
 
+The first implementation now provides the device-mode CLI and CoreAudio HAL
+capture path. It accepts a stereo 48 kHz virtual device UID, captures through
+an input-enabled HAL output unit, and hands PCM frames to the existing AOO
+sender through a bounded preallocated queue. A device is not bundled or
+installed yet; BlackHole remains the external test dependency for this phase.
+
 The sender must accept the device's actual stream format and convert it to the
 relay contract where necessary. The network format remains 48 kHz, stereo,
 float PCM before Opus encoding. Conversion and interleaving must happen outside

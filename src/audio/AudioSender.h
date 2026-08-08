@@ -16,15 +16,28 @@
 
 #include <cstdint>
 #include <memory>
+#include <string>
 
 namespace inputleap {
 namespace audio {
 
 class AudioSenderImpl;
 
+enum class AudioCaptureMode {
+    Device,
+    Screen
+};
+
+struct AudioCaptureOptions {
+    AudioCaptureMode mode = AudioCaptureMode::Device;
+    std::string device_uid;
+};
+
 class AudioSender {
 public:
-    AudioSender(const AudioRelayConfig& config, AooId source_id);
+    AudioSender(const AudioRelayConfig& config,
+                AooId source_id,
+                AudioCaptureOptions options = {});
     ~AudioSender();
 
     bool start();

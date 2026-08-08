@@ -51,9 +51,10 @@ fails, keyboard, mouse, and clipboard sharing must remain connected.
 The first executable milestone is a Windows playback-only receiver using AOO.
 It is built as `input-leap-audiod` and is intentionally separate from the
 keyboard/mouse process. The macOS source is built as `input-leap-audios` and
-uses ScreenCaptureKit to capture system audio. It requires macOS 13 or newer
-and Screen Recording permission. The AOO invitation is accepted automatically
-for this milestone; authenticated pairing is still a follow-up requirement.
+now has a CoreAudio device path as its product path. ScreenCaptureKit remains
+an explicit fallback for diagnostics and requires macOS 13 or newer plus Screen
+Recording permission. The AOO invitation is accepted automatically for this
+milestone; authenticated pairing is still a follow-up requirement.
 
 ## Build the receiver milestone
 
@@ -83,14 +84,30 @@ cmake -S . -B build -DINPUTLEAP_BUILD_GUI=OFF -DINPUTLEAP_BUILD_AUDIO_DAEMON=ON
 cmake --build build --target input-leap-audios
 ```
 
-Run `input-leap-audios` on the Mac source machine. The Windows receiver should
-use the Mac's address as `--source`, with the same UDP port and source ID:
+List the macOS devices first and identify the input side of the virtual device
+by its stable UID:
 
 ```text
-input-leap-audios --media-port 24801 --source-id 1
+input-leap-audios --list-audio-devices
+```
+
+Run `input-leap-audios` on the Mac source machine with that UID. The Windows
+receiver should use the Mac's address as `--source`, with the same UDP port and
+source ID:
+
+```text
+input-leap-audios --capture-mode device \
+  --audio-device-uid <virtual-device-uid> \
+  --media-port 24801 --source-id 1
 input-leap-audiod.exe --mode receive --source 192.168.0.40 \
   --source-port 24801 --media-port 24801 --source-id 1
 ```
+
+Phase 1 expects a stereo, 48 kHz device. Install and configure a test virtual
+device such as BlackHole before running device mode. The sender does not
+install or rebrand that third-party driver. Use `--capture-mode screen` only
+to exercise the older ScreenCaptureKit fallback, which mirrors audio instead
+of becoming a selectable macOS output.
 
 The receiver sends the AOO invitation; the Mac sender accepts it and begins
 forwarding captured PCM frames. This first connection is not authenticated,

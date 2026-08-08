@@ -12,6 +12,7 @@
 #import <Foundation/Foundation.h>
 #import <ScreenCaptureKit/ScreenCaptureKit.h>
 
+#include "MacAudioCapture.h"
 #include "AudioSender.h"
 
 #include <aoo.h>
@@ -21,16 +22,21 @@
 
 #include <array>
 #include <atomic>
+#include <chrono>
 #include <cstddef>
 #include <cstring>
 #include <iostream>
 #include <thread>
+#include <utility>
 
 namespace inputleap {
 namespace audio {
 namespace {
 
 constexpr std::size_t kMaxChannels = 8;
+constexpr std::size_t kCaptureQueueBlocks = 16;
+constexpr std::size_t kCaptureQueueSamples =
+    kMaxAudioCallbackFrames * kMaxChannels;
 
 } // namespace
 
@@ -48,8 +54,12 @@ namespace audio {
 
 class AudioSenderImpl {
 public:
-    AudioSenderImpl(const AudioRelayConfig& config, AooId source_id)
-        : m_config(config), m_source_id(source_id)
+    AudioSenderImpl(const AudioRelayConfig& config,
+                    AooId source_id,
+                    AudioCaptureOptions options)
+        : m_config(config),
+          m_source_id(source_id),
+          m_options(std::move(options))
     {
     }
 
@@ -64,31 +74,49 @@ public:
 
     void handle_sample(CMSampleBufferRef sample_buffer);
     void handle_stream_error(NSError* error);
+    void enqueue_audio(const float* interleaved,
+                       std::uint32_t frames,
+                       std::uint16_t channels);
 
 private:
     bool setup_network();
     bool setup_capture();
+    bool setup_device_capture();
+    bool setup_screen_capture();
     bool start_capture();
     void stop_capture();
+    void capture_process_loop();
     void network_send_loop();
     void network_receive_loop();
 
     AudioRelayConfig m_config;
     AooId m_source_id;
+    AudioCaptureOptions m_options;
     AooSource::Ptr m_source;
     AooClient::Ptr m_client;
 
     __strong SCStream* m_stream = nil;
     __strong ScreenAudioOutput* m_output = nil;
-    dispatch_queue_t m_capture_queue = nil;
+    dispatch_queue_t m_screen_capture_queue = nil;
+    std::unique_ptr<MacAudioCapture> m_device_capture;
 
     std::atomic<bool> m_running{false};
     std::atomic<bool> m_capture_failed{false};
+    std::atomic<bool> m_capture_processing{false};
     bool m_aoo_initialized = false;
     bool m_capture_started = false;
     std::thread m_send_thread;
     std::thread m_receive_thread;
+    std::thread m_capture_thread;
 
+    std::array<float, kCaptureQueueBlocks * kCaptureQueueSamples>
+        m_capture_queue_buffer{};
+    std::array<std::uint32_t, kCaptureQueueBlocks>
+        m_capture_queue_frames{};
+    std::atomic<std::uint32_t> m_capture_queue_write{0};
+    std::atomic<std::uint32_t> m_capture_queue_read{0};
+    std::array<float, kMaxAudioCallbackFrames * kMaxChannels>
+        m_interleaved_capture_buffer{};
     std::array<float, kMaxChannels * kMaxAudioCallbackFrames> m_channel_buffer{};
     std::array<AooSample*, kMaxChannels> m_channel_pointers{};
 };
@@ -192,7 +220,29 @@ bool AudioSenderImpl::setup_network()
     return true;
 }
 
-bool AudioSenderImpl::setup_capture()
+bool AudioSenderImpl::setup_device_capture()
+{
+    m_device_capture = std::make_unique<MacAudioCapture>(
+        m_config,
+        m_options.device_uid,
+        [](void* user, const float* interleaved, std::uint32_t frames,
+           std::uint16_t channels) {
+            static_cast<AudioSenderImpl*>(user)->enqueue_audio(
+                interleaved, frames, channels);
+        },
+        this);
+    std::string error;
+    if (!m_device_capture->start(&error)) {
+        std::cerr << "audio: could not start CoreAudio device capture: "
+                  << error << "\n";
+        return false;
+    }
+    std::cerr << "audio: capturing CoreAudio device UID "
+              << m_options.device_uid << "\n";
+    return true;
+}
+
+bool AudioSenderImpl::setup_screen_capture()
 {
     if (@available(macOS 13.0, *)) {
         dispatch_semaphore_t content_semaphore = dispatch_semaphore_create(0);
@@ -228,7 +278,7 @@ bool AudioSenderImpl::setup_capture()
         configuration.channelCount = m_config.format.channels;
         configuration.queueDepth = 3;
 
-        m_capture_queue = dispatch_queue_create(
+        m_screen_capture_queue = dispatch_queue_create(
             "com.johneybi.input-leap-keymap.audio-capture",
             DISPATCH_QUEUE_SERIAL);
         m_output = [[ScreenAudioOutput alloc] init];
@@ -244,7 +294,7 @@ bool AudioSenderImpl::setup_capture()
         NSError* output_error = nil;
         if (![m_stream addStreamOutput:m_output
                                   type:SCStreamOutputTypeAudio
-                    sampleHandlerQueue:m_capture_queue
+                    sampleHandlerQueue:m_screen_capture_queue
                                 error:&output_error]) {
             std::cerr << "audio: could not add audio stream output";
             if (output_error != nil) {
@@ -260,8 +310,19 @@ bool AudioSenderImpl::setup_capture()
     return false;
 }
 
+bool AudioSenderImpl::setup_capture()
+{
+    if (m_options.mode == AudioCaptureMode::Device) {
+        return setup_device_capture();
+    }
+    return setup_screen_capture();
+}
+
 bool AudioSenderImpl::start_capture()
 {
+    if (m_options.mode == AudioCaptureMode::Device) {
+        return true;
+    }
     if (@available(macOS 13.0, *)) {
         dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
         __block NSError* start_error = nil;
@@ -283,6 +344,11 @@ bool AudioSenderImpl::start_capture()
 
 void AudioSenderImpl::stop_capture()
 {
+    if (m_device_capture) {
+        m_device_capture->stop();
+        m_device_capture.reset();
+        return;
+    }
     if (m_stream == nil) {
         return;
     }
@@ -291,7 +357,7 @@ void AudioSenderImpl::stop_capture()
         if (!m_capture_started) {
             m_stream = nil;
             m_output = nil;
-            m_capture_queue = nil;
+            m_screen_capture_queue = nil;
             return;
         }
         dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
@@ -303,7 +369,7 @@ void AudioSenderImpl::stop_capture()
     m_capture_started = false;
     m_stream = nil;
     m_output = nil;
-    m_capture_queue = nil;
+    m_screen_capture_queue = nil;
 }
 
 bool AudioSenderImpl::start()
@@ -312,6 +378,7 @@ bool AudioSenderImpl::start()
         return true;
     }
 
+    m_capture_failed.store(false);
     std::string error;
     if (!m_config.is_valid(&error)) {
         std::cerr << "audio: invalid configuration: " << error << "\n";
@@ -328,6 +395,8 @@ bool AudioSenderImpl::start()
     }
 
     m_running.store(true);
+    m_capture_processing.store(true);
+    m_capture_thread = std::thread(&AudioSenderImpl::capture_process_loop, this);
     m_send_thread = std::thread(&AudioSenderImpl::network_send_loop, this);
     m_receive_thread = std::thread(&AudioSenderImpl::network_receive_loop, this);
     if (m_source->startStream(0, nullptr) != kAooOk) {
@@ -348,10 +417,14 @@ bool AudioSenderImpl::start()
 void AudioSenderImpl::stop()
 {
     const bool was_running = m_running.exchange(false);
+    m_capture_processing.store(false);
+    stop_capture();
+    if (m_capture_thread.joinable()) {
+        m_capture_thread.join();
+    }
     if (was_running && m_source) {
         m_source->stopStream(0);
     }
-    stop_capture();
 
     if (m_client) {
         m_client->stop();
@@ -367,6 +440,66 @@ void AudioSenderImpl::stop()
     if (m_aoo_initialized) {
         aoo_terminate();
         m_aoo_initialized = false;
+    }
+}
+
+void AudioSenderImpl::enqueue_audio(const float* interleaved,
+                                    std::uint32_t frames,
+                                    std::uint16_t channels)
+{
+    if (interleaved == nullptr || frames == 0 ||
+        frames > kMaxAudioCallbackFrames || channels == 0 ||
+        channels > kMaxChannels || channels != m_config.format.channels) {
+        return;
+    }
+
+    const auto write = m_capture_queue_write.load(std::memory_order_relaxed);
+    const auto read = m_capture_queue_read.load(std::memory_order_acquire);
+    if (write - read >= kCaptureQueueBlocks) {
+        return;
+    }
+
+    const auto index = write % kCaptureQueueBlocks;
+    auto* destination = m_capture_queue_buffer.data() +
+                        index * kCaptureQueueSamples;
+    std::memcpy(destination,
+                interleaved,
+                frames * channels * sizeof(float));
+    m_capture_queue_frames[index] = frames;
+    m_capture_queue_write.store(write + 1, std::memory_order_release);
+}
+
+void AudioSenderImpl::capture_process_loop()
+{
+    while (m_capture_processing.load(std::memory_order_acquire) ||
+           m_capture_queue_read.load(std::memory_order_acquire) !=
+               m_capture_queue_write.load(std::memory_order_acquire)) {
+        const auto read = m_capture_queue_read.load(std::memory_order_relaxed);
+        const auto write = m_capture_queue_write.load(std::memory_order_acquire);
+        if (read == write) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            continue;
+        }
+
+        const auto index = read % kCaptureQueueBlocks;
+        const auto frames = m_capture_queue_frames[index];
+        const auto* source = m_capture_queue_buffer.data() +
+                             index * kCaptureQueueSamples;
+        for (std::uint16_t channel = 0;
+             channel < m_config.format.channels;
+             ++channel) {
+            m_channel_pointers[channel] =
+                m_channel_buffer.data() + channel * kMaxAudioCallbackFrames;
+            for (std::uint32_t frame = 0; frame < frames; ++frame) {
+                m_channel_pointers[channel][frame] =
+                    source[frame * m_config.format.channels + channel];
+            }
+        }
+        m_source->process(m_channel_pointers.data(),
+                          static_cast<AooInt32>(frames),
+                          aoo_getCurrentNtpTime());
+        m_client->notify();
+        m_capture_queue_read.store(read + 1, std::memory_order_release);
     }
 }
 
@@ -432,11 +565,8 @@ void AudioSenderImpl::handle_sample(CMSampleBufferRef sample_buffer)
         non_interleaved ? audio_buffers->mNumberBuffers
                         : audio_buffers->mBuffers[0].mNumberChannels;
 
-    for (std::size_t channel = 0; channel < channel_count; ++channel) {
-        m_channel_pointers[channel] =
-            m_channel_buffer.data() +
-            channel * kMaxAudioCallbackFrames;
-        for (std::size_t frame = 0; frame < frame_count; ++frame) {
+    for (std::size_t frame = 0; frame < frame_count; ++frame) {
+        for (std::size_t channel = 0; channel < channel_count; ++channel) {
             float value = 0.0f;
             if (channel < available_channels) {
                 const auto buffer_index = non_interleaved ? channel : 0;
@@ -460,21 +590,24 @@ void AudioSenderImpl::handle_sample(CMSampleBufferRef sample_buffer)
                     }
                 }
             }
-            m_channel_pointers[channel][frame] = value;
+            m_interleaved_capture_buffer[
+                frame * channel_count + channel] = value;
         }
     }
 
-    m_source->process(m_channel_pointers.data(),
-                      static_cast<AooInt32>(frame_count),
-                      aoo_getCurrentNtpTime());
-    m_client->notify();
+    enqueue_audio(m_interleaved_capture_buffer.data(),
+                  static_cast<std::uint32_t>(frame_count),
+                  static_cast<std::uint16_t>(channel_count));
     if (block_buffer != nullptr) {
         CFRelease(block_buffer);
     }
 }
 
-AudioSender::AudioSender(const AudioRelayConfig& config, AooId source_id)
-    : m_impl(std::make_unique<AudioSenderImpl>(config, source_id))
+AudioSender::AudioSender(const AudioRelayConfig& config,
+                         AooId source_id,
+                         AudioCaptureOptions options)
+    : m_impl(std::make_unique<AudioSenderImpl>(config, source_id,
+                                                std::move(options)))
 {
 }
 

@@ -10,8 +10,10 @@
 
 #include "AudioSender.h"
 #include "AudioProcessWait.h"
+#include "MacAudioCapture.h"
 
 #include <cstdlib>
+#include <iomanip>
 #include <iostream>
 #include <string>
 
@@ -21,6 +23,9 @@ void print_usage()
 {
     std::cout
         << "usage: input-leap-audios [options]\n"
+        << "  --list-audio-devices       list CoreAudio devices and exit\n"
+        << "  --capture-mode MODE        device (default) or screen\n"
+        << "  --audio-device-uid UID     CoreAudio device UID for device mode\n"
         << "  --media-port PORT  local AOO UDP port (default: 24801)\n"
         << "  --source-id ID     source ID (default: 1)\n"
         << "  --help             show this help\n";
@@ -54,11 +59,30 @@ int main(int argc, char** argv)
 {
     std::uint16_t media_port = inputleap::audio::kDefaultMediaPort;
     AooId source_id = 1;
+    inputleap::audio::AudioCaptureOptions capture_options;
 
     for (int index = 1; index < argc; ++index) {
         const std::string option = argv[index];
         if (option == "--help") {
             print_usage();
+            return EXIT_SUCCESS;
+        }
+        if (option == "--list-audio-devices") {
+            std::string error;
+            const auto devices = inputleap::audio::list_mac_audio_devices(&error);
+            if (!error.empty()) {
+                std::cerr << "audio: " << error << "\n";
+                return EXIT_FAILURE;
+            }
+            for (const auto& device : devices) {
+                std::cout << "id=" << device.id
+                          << " name=\"" << device.name << "\""
+                          << " uid=\"" << device.uid << "\""
+                          << " input-channels=" << device.input_channels
+                          << " output-channels=" << device.output_channels
+                          << " sample-rate=" << std::fixed
+                          << std::setprecision(0) << device.sample_rate << "\n";
+            }
             return EXIT_SUCCESS;
         }
         if (index + 1 >= argc) {
@@ -76,16 +100,33 @@ int main(int argc, char** argv)
                 std::cerr << "invalid source id\n";
                 return EXIT_FAILURE;
             }
+        } else if (option == "--capture-mode") {
+            if (std::string(value) == "device") {
+                capture_options.mode = inputleap::audio::AudioCaptureMode::Device;
+            } else if (std::string(value) == "screen") {
+                capture_options.mode = inputleap::audio::AudioCaptureMode::Screen;
+            } else {
+                std::cerr << "capture mode must be device or screen\n";
+                return EXIT_FAILURE;
+            }
+        } else if (option == "--audio-device-uid") {
+            capture_options.device_uid = value;
         } else {
             std::cerr << "unknown option: " << option << "\n";
             return EXIT_FAILURE;
         }
     }
 
+    if (capture_options.mode == inputleap::audio::AudioCaptureMode::Device &&
+        capture_options.device_uid.empty()) {
+        std::cerr << "audio: --audio-device-uid is required in device mode\n";
+        return EXIT_FAILURE;
+    }
+
     inputleap::audio::AudioRelayConfig config;
     config.media_port = media_port;
 
-    inputleap::audio::AudioSender sender(config, source_id);
+    inputleap::audio::AudioSender sender(config, source_id, capture_options);
     if (!sender.start()) {
         return EXIT_FAILURE;
     }
