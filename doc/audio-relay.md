@@ -1,5 +1,10 @@
 # Audio relay design
 
+> The current ScreenCaptureKit sender is a system-audio mirroring milestone.
+> The product goal of making the Windows computer selectable as a normal macOS
+> audio output is specified separately in
+> [macos-virtual-audio-output-handoff.md](macos-virtual-audio-output-handoff.md).
+
 The audio path is intentionally separate from Input Leap's keyboard and mouse
 connection. The input protocol stays on TCP port `24800`; the audio path will
 use a separate media port, currently `24801`.
