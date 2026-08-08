@@ -58,6 +58,17 @@ such as BlackHole for the first end-to-end implementation. Do not copy or
 rebrand third-party driver code until its license and redistribution terms
 have been recorded.
 
+For a development machine, install BlackHole 2ch interactively with:
+
+```text
+brew install --cask blackhole-2ch
+```
+
+The package installer requires administrator authentication and macOS may
+require a reboot before the device appears. After reboot, select BlackHole 2ch
+as the macOS Sound output, then run `--list-audio-devices` and use the UID of
+the device entry that reports two input channels.
+
 - Locate the device by stable CoreAudio device UID, never only by display name.
 - Add `input-leap-audios --list-audio-devices` to print device name, UID,
   channel counts, nominal sample rate, and transport type.

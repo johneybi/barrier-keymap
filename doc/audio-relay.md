@@ -103,9 +103,11 @@ input-leap-audiod.exe --mode receive --source 192.168.0.40 \
   --source-port 24801 --media-port 24801 --source-id 1
 ```
 
-Phase 1 expects a stereo, 48 kHz device. Install and configure a test virtual
-device such as BlackHole before running device mode. The sender does not
-install or rebrand that third-party driver. Use `--capture-mode screen` only
+Phase 1 expects a stereo, 48 kHz device. On a development Mac, install the
+test device with `brew install --cask blackhole-2ch`, authenticate the package
+installer, and reboot if macOS requests it. Select BlackHole 2ch as the macOS
+Sound output before starting the sender. The sender does not install or
+rebrand that third-party driver. Use `--capture-mode screen` only
 to exercise the older ScreenCaptureKit fallback, which mirrors audio instead
 of becoming a selectable macOS output.
 
