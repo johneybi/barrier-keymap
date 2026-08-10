@@ -160,3 +160,39 @@ ignoring immediate switch back to "<screen-name>"
 After rebuilding the Windows server, repeatedly enter the Mac at different
 speeds and confirm that it stays there. Also confirm that moving deliberately
 back to Windows after a short pause still works normally.
+
+## 2026-08-11 duplicate client incident
+
+The Windows server was reachable, but the Mac repeatedly opened four TCP
+connections with the same client name, `ESKui-MacBookPro`. Each group completed
+the 1.6 protocol hello and screen-info exchange, then collided with the other
+instances. The server logged the following every six seconds:
+
+```text
+accepted client connection
+created proxy for client "ESKui-MacBookPro" version 1.6
+a client with name "ESKui-MacBookPro" is already connected
+disconnecting client "ESKui-MacBookPro"
+```
+
+This is not discovery, firewall, screen-layout, or TCP reachability failure.
+The Mac is running multiple supervised or manually launched client instances.
+
+Before another Windows test, inspect the GUI, LaunchAgents, login items, and
+manual `input-leapc` processes. Stop all Mac client instances and start exactly
+one owner: either the GUI/supervisor or one CLI process, never both. Make sure a
+supervisor does not start another client while one is already running.
+
+The Mac handoff is complete only when:
+
+1. exactly one `input-leapc` process is running;
+2. Windows shows one established TCP session from `192.168.0.40` to port
+   `24800`;
+3. the server logs one successful `ESKui-MacBookPro` connection without
+   `already connected` or six-second reconnect cycles; and
+4. the pointer crosses the configured right edge and remains on the Mac.
+
+On Windows, an old `barriers.exe` process was also found competing with the
+new `input-leaps.exe` listener. It was stopped, and the active listener is now
+the current Input Leap build. Do not use the old Barrier GUI to supervise a
+second Windows server during this test.
