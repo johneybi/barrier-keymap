@@ -20,6 +20,9 @@
 
 #include "base/Log.h"
 
+#include <cstdint>
+#include <limits>
+
 namespace inputleap {
 
 MSWindowsClipboardBitmapConverter::MSWindowsClipboardBitmapConverter()
@@ -66,15 +69,26 @@ HANDLE MSWindowsClipboardBitmapConverter::fromIClipboard(const std::string& data
 
 std::string MSWindowsClipboardBitmapConverter::toIClipboard(HANDLE data) const
 {
-    // get datator
+    // Clipboard data is supplied by other applications. Validate every size
+    // before using it for pointer arithmetic or string allocation.
     LPVOID src = GlobalLock(data);
     if (src == nullptr) {
         return {};
     }
-    std::uint32_t srcSize = (std::uint32_t)GlobalSize(data);
+    const auto unlock = [&]() { GlobalUnlock(data); };
+    const SIZE_T srcSize = GlobalSize(data);
+    if (srcSize < sizeof(BITMAPINFOHEADER)) {
+        unlock();
+        return {};
+    }
 
     // check image type
     const BITMAPINFO* bitmap = static_cast<const BITMAPINFO*>(src);
+    if (bitmap->bmiHeader.biSize < sizeof(BITMAPINFOHEADER) ||
+        bitmap->bmiHeader.biSize > srcSize) {
+        unlock();
+        return {};
+    }
     LOG_INFO("bitmap: %dx%d %d", bitmap->bmiHeader.biWidth, bitmap->bmiHeader.biHeight, (int)bitmap->bmiHeader.biBitCount);
     if (bitmap->bmiHeader.biPlanes == 1 &&
         (bitmap->bmiHeader.biBitCount == 24 ||
@@ -82,16 +96,62 @@ std::string MSWindowsClipboardBitmapConverter::toIClipboard(HANDLE data) const
         bitmap->bmiHeader.biCompression == BI_RGB) {
         // already in canonical form
         std::string image(static_cast<char const*>(src), srcSize);
-        GlobalUnlock(data);
+        unlock();
         return image;
     }
 
     // create a destination DIB section
     LOG_INFO("convert image from: depth=%d comp=%d", bitmap->bmiHeader.biBitCount, bitmap->bmiHeader.biCompression);
-    void* raw;
+    const std::int64_t width = bitmap->bmiHeader.biWidth;
+    const std::int64_t height = bitmap->bmiHeader.biHeight;
+    if (width <= 0 || height == 0 ||
+        height == std::numeric_limits<LONG>::min()) {
+        unlock();
+        return {};
+    }
+
+    // A negative DIB height means top-down pixels. Keep that orientation in
+    // the output header, but use the positive pixel count for all sizes and
+    // Win32 API dimensions.
+    const auto pixelHeight = static_cast<std::uint64_t>(height < 0 ? -height : height);
+    const auto pixelWidth = static_cast<std::uint64_t>(width);
+    const auto bitsPerPixel = static_cast<std::uint64_t>(bitmap->bmiHeader.biBitCount);
+    const auto checkedMultiply = [](std::uint64_t left, std::uint64_t right,
+                                    std::uint64_t& result) {
+        if (left != 0 && right > std::numeric_limits<std::uint64_t>::max() / left) {
+            return false;
+        }
+        result = left * right;
+        return true;
+    };
+    std::uint64_t sourceBitsPerRow = 0;
+    std::uint64_t sourceRowBytes = 0;
+    std::uint64_t sourcePixelBytes = 0;
+    std::uint64_t destinationPixelBytes = 0;
+    if (bitsPerPixel == 0 ||
+        !checkedMultiply(pixelWidth, bitsPerPixel, sourceBitsPerRow) ||
+        sourceBitsPerRow > std::numeric_limits<std::uint64_t>::max() - 31 ||
+        !checkedMultiply((sourceBitsPerRow + 31) / 32, 4, sourceRowBytes) ||
+        !checkedMultiply(sourceRowBytes, pixelHeight, sourcePixelBytes) ||
+        !checkedMultiply(pixelWidth, pixelHeight, destinationPixelBytes) ||
+        !checkedMultiply(destinationPixelBytes, 4, destinationPixelBytes) ||
+        sourceRowBytes == 0 ||
+        sourcePixelBytes > srcSize - bitmap->bmiHeader.biSize) {
+        unlock();
+        return {};
+    }
+
+    if (destinationPixelBytes >
+        std::numeric_limits<std::size_t>::max() - sizeof(BITMAPINFOHEADER)) {
+        unlock();
+        return {};
+    }
+
+    void* raw = nullptr;
     BITMAPINFOHEADER info;
-    LONG w               = bitmap->bmiHeader.biWidth;
-    LONG h               = bitmap->bmiHeader.biHeight;
+    const LONG w = static_cast<LONG>(width);
+    const LONG h = bitmap->bmiHeader.biHeight;
+    const LONG positiveHeight = static_cast<LONG>(pixelHeight);
     info.biSize          = sizeof(BITMAPINFOHEADER);
     info.biWidth         = w;
     info.biHeight        = h;
@@ -104,45 +164,87 @@ std::string MSWindowsClipboardBitmapConverter::toIClipboard(HANDLE data) const
     info.biClrUsed       = 0;
     info.biClrImportant  = 0;
     HDC dc = GetDC(nullptr);
+    if (dc == nullptr) {
+        unlock();
+        return {};
+    }
     HBITMAP dst = CreateDIBSection(dc, (BITMAPINFO*)&info,
                                    DIB_RGB_COLORS, &raw, nullptr, 0);
+    if (dst == nullptr || raw == nullptr) {
+        ReleaseDC(nullptr, dc);
+        unlock();
+        return {};
+    }
 
     // find the start of the pixel data
-    const char* srcBits = (const char*)bitmap + bitmap->bmiHeader.biSize;
+    SIZE_T pixelOffset = bitmap->bmiHeader.biSize;
     if (bitmap->bmiHeader.biBitCount >= 16) {
         if (bitmap->bmiHeader.biCompression == BI_BITFIELDS &&
             (bitmap->bmiHeader.biBitCount == 16 ||
             bitmap->bmiHeader.biBitCount == 32)) {
-            srcBits += 3 * sizeof(DWORD);
+            pixelOffset += 3 * sizeof(DWORD);
         }
     }
     else if (bitmap->bmiHeader.biClrUsed != 0) {
-        srcBits += bitmap->bmiHeader.biClrUsed * sizeof(RGBQUAD);
+        pixelOffset += bitmap->bmiHeader.biClrUsed * sizeof(RGBQUAD);
     }
     else {
         //http://msdn.microsoft.com/en-us/library/ke55d167(VS.80).aspx
-        srcBits += (1i64 << bitmap->bmiHeader.biBitCount) * sizeof(RGBQUAD);
+        pixelOffset += (1i64 << bitmap->bmiHeader.biBitCount) * sizeof(RGBQUAD);
     }
+    if (pixelOffset > srcSize || sourcePixelBytes > srcSize - pixelOffset) {
+        DeleteObject(dst);
+        ReleaseDC(nullptr, dc);
+        unlock();
+        return {};
+    }
+    const char* srcBits = static_cast<const char*>(src) + pixelOffset;
 
     // copy source image to destination image
     HDC dstDC         = CreateCompatibleDC(dc);
+    if (dstDC == nullptr) {
+        DeleteObject(dst);
+        ReleaseDC(nullptr, dc);
+        unlock();
+        return {};
+    }
     HGDIOBJ oldBitmap = SelectObject(dstDC, dst);
-    SetDIBitsToDevice(dstDC, 0, 0, w, h, 0, 0, 0, h,
-                            srcBits, bitmap, DIB_RGB_COLORS);
+    if (oldBitmap == nullptr ||
+        SetDIBitsToDevice(dstDC, 0, 0, w, positiveHeight, 0, 0, 0,
+                          positiveHeight, srcBits, bitmap, DIB_RGB_COLORS) == 0) {
+        if (oldBitmap != nullptr) {
+            SelectObject(dstDC, oldBitmap);
+        }
+        DeleteDC(dstDC);
+        DeleteObject(dst);
+        ReleaseDC(nullptr, dc);
+        unlock();
+        return {};
+    }
     SelectObject(dstDC, oldBitmap);
     DeleteDC(dstDC);
     GdiFlush();
 
     // extract data
-    std::string image((const char*)&info, info.biSize);
-    image.append((const char*)raw, 4 * w * h);
+    std::string image;
+    try {
+        image.assign(reinterpret_cast<const char*>(&info), info.biSize);
+        image.append(static_cast<const char*>(raw),
+                     static_cast<std::size_t>(destinationPixelBytes));
+    }
+    catch (...) {
+        DeleteObject(dst);
+        ReleaseDC(nullptr, dc);
+        unlock();
+        return {};
+    }
 
     // clean up GDI
     DeleteObject(dst);
     ReleaseDC(nullptr, dc);
 
     // release handle
-    GlobalUnlock(data);
+    unlock();
 
     return image;
 }
