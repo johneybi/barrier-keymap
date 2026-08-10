@@ -105,7 +105,7 @@ std::string MSWindowsClipboardBitmapConverter::toIClipboard(HANDLE data) const
     const std::int64_t width = bitmap->bmiHeader.biWidth;
     const std::int64_t height = bitmap->bmiHeader.biHeight;
     if (width <= 0 || height == 0 ||
-        height == std::numeric_limits<LONG>::min()) {
+        height == (std::numeric_limits<LONG>::min)()) {
         unlock();
         return {};
     }
@@ -118,7 +118,7 @@ std::string MSWindowsClipboardBitmapConverter::toIClipboard(HANDLE data) const
     const auto bitsPerPixel = static_cast<std::uint64_t>(bitmap->bmiHeader.biBitCount);
     const auto checkedMultiply = [](std::uint64_t left, std::uint64_t right,
                                     std::uint64_t& result) {
-        if (left != 0 && right > std::numeric_limits<std::uint64_t>::max() / left) {
+        if (left != 0 && right > (std::numeric_limits<std::uint64_t>::max)() / left) {
             return false;
         }
         result = left * right;
@@ -130,7 +130,7 @@ std::string MSWindowsClipboardBitmapConverter::toIClipboard(HANDLE data) const
     std::uint64_t destinationPixelBytes = 0;
     if (bitsPerPixel == 0 ||
         !checkedMultiply(pixelWidth, bitsPerPixel, sourceBitsPerRow) ||
-        sourceBitsPerRow > std::numeric_limits<std::uint64_t>::max() - 31 ||
+        sourceBitsPerRow > (std::numeric_limits<std::uint64_t>::max)() - 31 ||
         !checkedMultiply((sourceBitsPerRow + 31) / 32, 4, sourceRowBytes) ||
         !checkedMultiply(sourceRowBytes, pixelHeight, sourcePixelBytes) ||
         !checkedMultiply(pixelWidth, pixelHeight, destinationPixelBytes) ||
@@ -142,7 +142,7 @@ std::string MSWindowsClipboardBitmapConverter::toIClipboard(HANDLE data) const
     }
 
     if (destinationPixelBytes >
-        std::numeric_limits<std::size_t>::max() - sizeof(BITMAPINFOHEADER)) {
+        (std::numeric_limits<std::size_t>::max)() - sizeof(BITMAPINFOHEADER)) {
         unlock();
         return {};
     }
