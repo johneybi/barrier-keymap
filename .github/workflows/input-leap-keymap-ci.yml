@@ -48,6 +48,7 @@ jobs:
             -D INPUTLEAP_BUILD_GUI=ON `
             -D INPUTLEAP_BUILD_TESTS=ON `
             -D INPUTLEAP_BUILD_AUDIO_DAEMON=ON `
+            -D INPUTLEAP_VERSION_DESC=0 `
             -D DNSSD_LIB="${{ steps.bonjour.outputs.path }}\Lib\x64\dnssd.lib" `
             -D CMAKE_INSTALL_PREFIX="$env:GITHUB_WORKSPACE\build\install"
         env:
