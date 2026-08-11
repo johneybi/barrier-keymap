@@ -26,7 +26,7 @@
 const char AppConfig::server_name_[] = "input-leaps.exe";
 const char AppConfig::client_name_[] = "input-leapc.exe";
 const char AppConfig::log_dir_[] = "log/";
-#define DEFAULT_PROCESS_MODE Service
+#define DEFAULT_PROCESS_MODE Desktop
 #else
 const char AppConfig::server_name_[] = "input-leaps";
 const char AppConfig::client_name_[] = "input-leapc";

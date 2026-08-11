@@ -149,6 +149,40 @@ Double click on a screen to edit its settings.</string>
        </item>
       </layout>
      </widget>
+     <widget class="QWidget" name="m_pTabKeyMappings">
+      <attribute name="title">
+       <string>Key mappings</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="verticalLayoutKeyMappings">
+       <item>
+        <widget class="QLabel" name="m_pLabelKeyMappings">
+         <property name="wordWrap">
+          <bool>true</bool>
+         </property>
+         <property name="text">
+          <string>Map keys for each client screen. Changes are written to the server configuration when you apply this dialog.</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="m_pButtonKeyMappings">
+         <property name="text">
+          <string>Configure key mappings...</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <spacer name="verticalSpacerKeyMappings">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size><width>20</width><height>40</height></size>
+         </property>
+        </spacer>
+       </item>
+      </layout>
+     </widget>
      <widget class="QWidget" name="m_pTabHotkeys">
       <attribute name="title">
        <string>Hotkeys</string>

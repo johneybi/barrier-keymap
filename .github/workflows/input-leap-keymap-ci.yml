@@ -21,6 +21,12 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.3'
+          cache: true
+
       - name: Download Bonjour SDK-like
         id: bonjour
         shell: pwsh
@@ -33,20 +39,22 @@ jobs:
           Expand-Archive 'deps/BonjourSDKLike.zip' -DestinationPath 'deps/BonjourSDKLike'
           "path=$env:GITHUB_WORKSPACE\deps\BonjourSDKLike" >> $env:GITHUB_OUTPUT
 
-      - name: Configure core build
+      - name: Configure Windows GUI and core build
         shell: pwsh
         run: |
           cmake -S . -B build -G "Visual Studio 17 2022" -A x64 `
             -D CMAKE_BUILD_TYPE=$env:B_BUILD_TYPE `
-            -D INPUTLEAP_BUILD_GUI=OFF `
+            -D QT_DEFAULT_MAJOR_VERSION=6 `
+            -D INPUTLEAP_BUILD_GUI=ON `
             -D INPUTLEAP_BUILD_TESTS=ON `
             -D INPUTLEAP_BUILD_AUDIO_DAEMON=ON `
-            -D DNSSD_LIB="${{ steps.bonjour.outputs.path }}\Lib\x64\dnssd.lib"
+            -D DNSSD_LIB="${{ steps.bonjour.outputs.path }}\Lib\x64\dnssd.lib" `
+            -D CMAKE_INSTALL_PREFIX="$env:GITHUB_WORKSPACE\build\install"
         env:
           BONJOUR_SDK_HOME: ${{ steps.bonjour.outputs.path }}
 
-      - name: Build core and tests
-        run: cmake --build build --config $env:B_BUILD_TYPE --parallel
+      - name: Build Windows GUI, core, and tests
+        run: cmake --build build --config $env:B_BUILD_TYPE --parallel --target install
 
       - name: Run keymap tests
         run: build/bin/Release/unittests.exe --gtest_filter=KeyRemapperTests.*:AudioRelayConfigTests.*
@@ -62,6 +70,21 @@ jobs:
           }
           exit 0
 
+      - name: Verify GUI package contents
+        shell: pwsh
+        run: |
+          foreach ($file in 'input-leap.exe', 'input-leaps.exe', 'input-leapc.exe', 'input-leapd.exe') {
+            if (-not (Test-Path "build/install/$file")) {
+              throw "Missing packaged binary: $file"
+            }
+          }
+          & .\build\install\input-leaps.exe --version
+
+      - name: Build Windows installer
+        shell: pwsh
+        run: |
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /Qp .\build\installer-inno\input-leap.iss
+
       - name: Upload command-line binaries
         uses: actions/upload-artifact@v4
         with:
@@ -71,6 +94,13 @@ jobs:
             build/bin/Release/input-leapc.exe
             build/bin/Release/input-leap-audiod.exe
           if-no-files-found: warn
+
+      - name: Upload Windows GUI installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: input-leap-keymap-windows-installer
+          path: build/installer-inno/bin/*.exe
+          if-no-files-found: error
 
   macos-arm64-app:
     runs-on: macos-14

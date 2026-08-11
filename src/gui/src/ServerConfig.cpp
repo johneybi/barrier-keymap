@@ -122,6 +122,17 @@ void ServerConfig::saveSettings()
     settings().setValue("clipboardSharing", clipboardSharing());
     settings().setValue("clipboardSharingSize", (int)clipboardSharingSize());
 
+    settings().beginWriteArray("keyRemaps");
+    for (int i = 0; i < m_KeyRemaps.size(); ++i) {
+        settings().setArrayIndex(i);
+        const auto& remap = m_KeyRemaps.at(i);
+        settings().setValue("screen", remap.screen);
+        settings().setValue("source", remap.source);
+        settings().setValue("output", remap.output);
+        settings().setValue("holdOutput", remap.holdOutput);
+    }
+    settings().endArray();
+
     writeSettings<bool>(settings(), switchCorners(), "switchCorner");
 
     settings().beginWriteArray("screens");
@@ -168,6 +179,19 @@ void ServerConfig::loadSettings()
     setClipboardSharing(settings().value("clipboardSharing", true).toBool());
     setClipboardSharingSize(settings().value("clipboardSharingSize",
         (int) ServerConfig::defaultClipboardSharingSize()).toULongLong());
+
+    m_KeyRemaps.clear();
+    const int keyRemapCount = settings().beginReadArray("keyRemaps");
+    for (int i = 0; i < keyRemapCount; ++i) {
+        settings().setArrayIndex(i);
+        KeyRemap remap;
+        remap.screen = settings().value("screen").toString();
+        remap.source = settings().value("source").toString();
+        remap.output = settings().value("output").toString();
+        remap.holdOutput = settings().value("holdOutput").toString();
+        m_KeyRemaps.append(remap);
+    }
+    settings().endArray();
 
     readSettings<bool>(settings(), switchCorners(), "switchCorner", false,
                        static_cast<int>(SwitchCorner::Count));
@@ -249,6 +273,21 @@ QTextStream& operator<<(QTextStream& outStream, const ServerConfig& config)
         }
 
     outStream << "end\n\n";
+
+    if (!config.keyRemaps().isEmpty()) {
+        outStream << "section: remaps\n";
+        for (const auto& remap : config.keyRemaps()) {
+            outStream << "\t" << remap.screen << ":\n";
+            if (remap.holdOutput.isEmpty()) {
+                outStream << "\t\t" << remap.source << " = " << remap.output << "\n";
+            }
+            else {
+                outStream << "\t\t" << remap.source << ".alone = " << remap.output << "\n";
+                outStream << "\t\t" << remap.source << ".hold = " << remap.holdOutput << "\n";
+            }
+        }
+        outStream << "end\n\n";
+    }
 
     outStream << "section: options\n";
 

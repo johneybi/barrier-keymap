@@ -52,6 +52,7 @@ class ServerConfigDialog : public QDialog
         void on_m_pButtonEditAction_clicked();
         void on_m_pButtonRemoveAction_clicked();
         void on_m_pCheckBoxEnableClipboard_stateChanged(int state);
+        void on_m_pButtonKeyMappings_clicked();
 
     protected:
         ServerConfig& serverConfig() { return m_ServerConfig; }

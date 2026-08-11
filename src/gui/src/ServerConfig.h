@@ -19,6 +19,7 @@
 #pragma once
 
 #include <QList>
+#include <QString>
 
 #include "Screen.h"
 #include "BaseConfig.h"
@@ -37,6 +38,14 @@ class ServerConfig : public BaseConfig
     friend QTextStream& operator<<(QTextStream& outStream, const ServerConfig& config);
 
     public:
+        struct KeyRemap
+        {
+            QString screen;
+            QString source;
+            QString output;
+            QString holdOutput;
+        };
+
         ServerConfig(QSettings* settings, int numColumns, int numRows,
             QString serverName, MainWindow* mainWindow);
         ~ServerConfig();
@@ -62,6 +71,7 @@ class ServerConfig : public BaseConfig
         bool enableDragAndDrop() const { return m_EnableDragAndDrop; }
         bool clipboardSharing() const { return m_ClipboardSharing; }
         size_t clipboardSharingSize() const { return m_ClipboardSharingSize; }
+        const QList<KeyRemap>& keyRemaps() const { return m_KeyRemaps; }
         static size_t defaultClipboardSharingSize();
 
         void saveSettings();
@@ -93,6 +103,7 @@ class ServerConfig : public BaseConfig
         void setEnableDragAndDrop(bool on) { m_EnableDragAndDrop = on; }
         void setClipboardSharing(bool on) { m_ClipboardSharing = on; }
         size_t setClipboardSharingSize(size_t size);
+        void setKeyRemaps(const QList<KeyRemap>& remaps) { m_KeyRemaps = remaps; }
         QList<bool>& switchCorners() { return m_SwitchCorners; }
         std::vector<Hotkey>& hotkeys() { return m_Hotkeys; }
 
@@ -127,6 +138,7 @@ class ServerConfig : public BaseConfig
         bool m_EnableDragAndDrop;
         bool m_ClipboardSharing;
         size_t m_ClipboardSharingSize;
+        QList<KeyRemap> m_KeyRemaps;
         MainWindow* m_pMainWindow;
 };
 

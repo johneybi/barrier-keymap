@@ -22,6 +22,7 @@
 #include "ServerConfig.h"
 #include "HotkeyDialog.h"
 #include "ActionDialog.h"
+#include "KeyRemapDialog.h"
 
 #include <QtCore>
 #include <QtGui>
@@ -223,6 +224,21 @@ void ServerConfigDialog::on_m_pListActions_itemSelectionChanged()
 void ServerConfigDialog::on_m_pCheckBoxEnableClipboard_stateChanged(int state)
 {
     ui_->m_pSpinBoxClipboardSizeLimit->setEnabled(state == Qt::Checked);
+}
+
+void ServerConfigDialog::on_m_pButtonKeyMappings_clicked()
+{
+    QStringList targetScreens;
+    for (const auto& screen : serverConfig().screens()) {
+        if (!screen.isNull()) {
+            targetScreens.append(screen.name());
+        }
+    }
+
+    KeyRemapDialog dialog(this, serverConfig().keyRemaps(), targetScreens);
+    if (dialog.exec() == QDialog::Accepted) {
+        serverConfig().setKeyRemaps(dialog.remaps());
+    }
 }
 
 ServerConfigDialog::~ServerConfigDialog() = default;

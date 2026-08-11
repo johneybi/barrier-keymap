@@ -35,6 +35,7 @@ set(GUI_SOURCE_FILES
     src/IpcClient.cpp
     src/Ipc.cpp
     src/IpcReader.cpp
+    src/KeyRemapDialog.cpp
     src/KeySequenceWidget.cpp
     src/LogWindow.cpp
     src/main.cpp
@@ -74,6 +75,7 @@ set(GUI_HEADER_FILES
     src/IpcClient.h
     src/Ipc.h
     src/IpcReader.h
+    src/KeyRemapDialog.h
     src/KeySequenceWidget.h
     src/LogWindow.h
     src/MainWindow.h

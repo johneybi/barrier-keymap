@@ -1,17 +1,14 @@
-#define MyAppName "InputLeap"
+#define MyAppName "Input Leap Keymap"
 #define MyAppVersion "@INPUTLEAP_VERSION_MAJOR@.@INPUTLEAP_VERSION_MINOR@.@INPUTLEAP_VERSION_PATCH@.@INPUTLEAP_VERSION_DESC@"
 #define MyAppTextVersion "@INPUTLEAP_VERSION@"
-#define MyAppPublisher "InputLeap contributors"
-#define MyAppURL "https://github.com/input-leap/input-leap/wiki"
-#define MyAppCopyright "Copyright (C) InputLeap contributors"
+#define MyAppPublisher "Input Leap Keymap contributors"
+#define MyAppURL "https://github.com/johneybi/barrier-keymap"
+#define MyAppCopyright "Copyright (C) Input Leap Keymap contributors"
 #define MyAppExeName "input-leap.exe"
-#define MyAppServiceName "InputLeap"
-#define MyAppServiceExe "input-leapd.exe"
-#define MyAppServiceDesc "Manages the InputLeap background processes."
-#define MyAppListenerDesc "InputLeap Listener"
+#define MyAppListenerDesc "Input Leap Keymap Listener"
 
 [Setup]
-AppId={{41036EA6-3F7A-4803-8AE0-46912391EFCC}
+AppId={{D9785C41-CF76-4DC8-9460-FCA5EF15558A}
 AppName={#MyAppName}
 AppVersion={#MyAppTextVersion}
 AppVerName={#MyAppName} {#MyAppTextVersion}
@@ -23,7 +20,7 @@ DefaultDirName={pf}\{#MyAppName}
 DisableProgramGroupPage=yes
 LicenseFile=@CMAKE_CURRENT_SOURCE_DIR@/res/License.rtf
 OutputDir=@CMAKE_INSTALL_PREFIX@/../installer-inno/bin
-OutputBaseFilename=InputLeapSetup-{#MyAppTextVersion}
+OutputBaseFilename=InputLeapKeymapSetup-{#MyAppTextVersion}
 SetupIconFile=@CMAKE_CURRENT_SOURCE_DIR@/res/input-leap.ico
 VersionInfoProductTextVersion={#MyAppTextVersion}
 VersionInfoProductVersion={#MyAppVersion}
@@ -45,6 +42,10 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Source: "@CMAKE_INSTALL_PREFIX@/*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
 
+[Registry]
+; Prevent an obsolete Barrier wrapper from starting a second server beside this GUI.
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: none; ValueName: "Barrier Keymap"
+
 [Icons]
 Name: "{commonprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 Name: "{commondesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
@@ -54,18 +55,9 @@ Name: "{commondesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: 
 ; to avoid duplicate entries remove the existing rule (fails if it doesn't exist) before adding
 Filename: {sys}\netsh.exe; Parameters: "advfirewall firewall delete rule name=""{#MyAppListenerDesc}"""; Flags: runhidden
 Filename: {sys}\netsh.exe; Parameters: "advfirewall firewall add rule name=""{#MyAppListenerDesc}"" protocol=TCP dir=in localport=24800 action=allow"; Flags: runhidden
-Filename: {sys}\sc.exe; Parameters: "create {#MyAppServiceName} start= auto binPath= ""\""{app}\{#MyAppServiceExe}\"""""; Flags: runhidden
-Filename: {sys}\sc.exe; Parameters: "description {#MyAppServiceName} ""{#MyAppServiceDesc}"""; Flags: runhidden
-Filename: {sys}\sc.exe; Parameters: "start {#MyAppServiceName}"; Flags: runhidden
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
 
-[UninstallDelete]
-Type: filesandordirs; Name: "{commonappdata}\InputLeap"
-
 [UninstallRun]
-Filename: {sys}\taskkill; Parameters: "/im {#MyAppExeName} /f /t"; Flags: runhidden
-Filename: {sys}\net.exe; Parameters: "stop {#MyAppServiceName}"; Flags: runhidden
-Filename: {sys}\sc.exe; Parameters: "delete {#MyAppServiceName}"; Flags: runhidden
 Filename: {sys}\netsh.exe; Parameters: "advfirewall firewall delete rule name=""{#MyAppListenerDesc}"""; Flags: runhidden
 
 [CustomMessages]
