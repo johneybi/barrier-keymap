@@ -210,3 +210,42 @@ For the next failure report, inspect the macOS client log around the exact
 disconnect time and report whether the client process exited, deliberately
 restarted, or lost its keep-alive. This observation moves the remaining issue
 from Windows bitmap conversion to macOS client lifetime or reconnect handling.
+
+## 2026-08-11 Hangul remap diagnostic
+
+Windows DEBUG1 traces prove that the Hangul key path is working through the
+network boundary. At 16:33:22 through 16:33:24 UTC, each key tap produced:
+
+```text
+onKeyDown id=61233 ... button=0x0138
+key remap pending tap ... key=\uef31 alone=\uee08 hold=Super_R
+onKeyUp id=61233 ... button=0x0138
+key remap tap ... key=\uef31->\uee08
+send key down ... id=60936, mask=0x0000, button=0x0138
+send key up ... id=60936, mask=0x0000, button=0x0138
+```
+
+The Windows configuration and the Input Leap protocol are therefore not the
+reason the macOS input source did not visibly change. Investigate the macOS
+post-receive path:
+
+```text
+kKeyNextGroup (0xEE08)
+  -> KeyMap group keystroke
+  -> OSXKeyState::cycleInputSource(+1)
+  -> TISSelectInputSource(target)
+```
+
+Run the macOS client at `DEBUG1`, tap the Windows Hangul key once while the
+pointer is on the Mac, and capture the line beginning:
+
+```text
+cycle macOS input source offset=+1 current=... target=... status=...
+```
+
+The current implementation filters source candidates by
+`kTISPropertyInputSourceIsSelectCapable` but does not additionally require
+`kTISPropertyInputSourceIsEnabled`. This contradicts the intended behavior of
+cycling enabled sources only and can select a disabled or irrelevant source.
+Confirm the captured current/target IDs and status first, then filter the list
+by both select-capable and enabled before rebuilding the macOS client.
