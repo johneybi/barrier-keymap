@@ -196,3 +196,17 @@ On Windows, an old `barriers.exe` process was also found competing with the
 new `input-leaps.exe` listener. It was stopped, and the active listener is now
 the current Input Leap build. Do not use the old Barrier GUI to supervise a
 second Windows server during this test.
+
+## 2026-08-11 post-fix connection observation
+
+After the Windows bitmap clipboard crash fix (`f895d433`), the Windows server
+remained alive while one Mac client stayed connected from approximately
+08:39:15 through 09:05:56 UTC. During that interval the server recorded normal
+screen switches in both directions and clipboard updates. There was no
+`string too long` fatal error and no listener loss. The Mac client then
+disconnected; the Windows server continued listening on `24800`.
+
+For the next failure report, inspect the macOS client log around the exact
+disconnect time and report whether the client process exited, deliberately
+restarted, or lost its keep-alive. This observation moves the remaining issue
+from Windows bitmap conversion to macOS client lifetime or reconnect handling.
