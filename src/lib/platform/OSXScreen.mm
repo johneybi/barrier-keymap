@@ -71,6 +71,7 @@ OSXScreen::OSXScreen(IEventQueue* events, bool isPrimary, bool autoShowHideCurso
 	m_isPrimary(isPrimary),
 	m_isOnScreen(m_isPrimary),
 	assertionID(0),
+	m_idleSleepAssertionID(kIOPMNullAssertionID),
 	m_displayID(kCGNullDirectDisplay),
 	m_x(0),
 	m_y(0),
@@ -720,6 +721,18 @@ OSXScreen::hideCursor()
 void
 OSXScreen::enable()
 {
+	if (!m_isPrimary && m_idleSleepAssertionID == kIOPMNullAssertionID) {
+		const IOReturn result = IOPMAssertionCreateWithName(
+			kIOPMAssertionTypePreventUserIdleSystemSleep,
+			kIOPMAssertionLevelOn,
+			CFSTR("Input Leap client is connected"),
+			&m_idleSleepAssertionID);
+		if (result != kIOReturnSuccess) {
+			LOG_WARN("failed to prevent idle system sleep, error=%d", result);
+			m_idleSleepAssertionID = kIOPMNullAssertionID;
+		}
+	}
+
 	// watch the clipboard
     m_clipboardTimer = m_events->newTimer(1.0, nullptr);
 	m_events->add_handler(EventType::TIMER, m_clipboardTimer,
@@ -768,6 +781,11 @@ OSXScreen::enable()
 void
 OSXScreen::disable()
 {
+	if (m_idleSleepAssertionID != kIOPMNullAssertionID) {
+		IOPMAssertionRelease(m_idleSleepAssertionID);
+		m_idleSleepAssertionID = kIOPMNullAssertionID;
+	}
+
 	if (m_autoShowHideCursor) {
 		showCursor();
 	}

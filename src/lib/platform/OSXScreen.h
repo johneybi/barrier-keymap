@@ -254,6 +254,9 @@ private:
     // IOKit power management assertion, refreshed on every enter()
     IOPMAssertionID assertionID;
 
+    // Keeps a connected client reachable after its display turns off.
+    IOPMAssertionID m_idleSleepAssertionID;
+
     // the display
     CGDirectDisplayID m_displayID;
 
