@@ -94,6 +94,9 @@ static const KeyEntry    s_controlKeys[] = {
     { kKeyF14,        kVK_F14 },
     { kKeyF15,        kVK_F15 },
     { kKeyF16,        kVK_F16 },
+    { kKeyF17,        kVK_F17 },
+    { kKeyF18,        kVK_F18 },
+    { kKeyF19,        kVK_F19 },
 
     { kKeyKP_0,        kVK_ANSI_Keypad0 },
     { kKeyKP_1,        kVK_ANSI_Keypad1 },
@@ -660,11 +663,41 @@ OSXKeyState::mapKeyFromEvent(KeyIDs& ids,
         return mapVirtualKeyToKeyButton(vkCode);
     }
 
-    // get keyboard info
+    // get keyboard info. macOS input methods such as 2SetHangul are not
+    // physical keyboard layouts. Translate their key events with the first
+    // available layout resource so the remote IME receives normal key IDs.
     TISInputSourceRef currentKeyboardLayout = TISCopyCurrentKeyboardLayoutInputSource();
 
     if (currentKeyboardLayout == NULL) {
         return kKeyNone;
+    }
+
+    CFDataRef currentLayoutID = (CFDataRef)TISGetInputSourceProperty(
+        currentKeyboardLayout, kTISPropertyInputSourceID);
+    bool isKnownKeyboardLayout = false;
+    for (GroupList::const_iterator group = m_groups.begin();
+         group != m_groups.end(); ++group) {
+        CFDataRef groupID = (CFDataRef)TISGetInputSourceProperty(
+            *group, kTISPropertyInputSourceID);
+        if (currentLayoutID != NULL && groupID != NULL &&
+            CFEqual(currentLayoutID, groupID)) {
+            isKnownKeyboardLayout = true;
+            break;
+        }
+    }
+
+    if (!isKnownKeyboardLayout) {
+        for (GroupList::const_iterator group = m_groups.begin();
+             group != m_groups.end(); ++group) {
+            CFDataRef layoutData = (CFDataRef)TISGetInputSourceProperty(
+                *group, kTISPropertyUnicodeKeyLayoutData);
+            if (layoutData != NULL) {
+                LOG((CLOG_DEBUG "active input method is not a keyboard layout; "
+                     "using the first available keyboard layout"));
+                currentKeyboardLayout = *group;
+                break;
+            }
+        }
     }
 
     // get the event modifiers and remove the command and control
@@ -809,9 +842,12 @@ OSXKeyState::pollActiveGroup() const
     CFDataRef id = (CFDataRef)TISGetInputSourceProperty(
                         keyboardLayout, kTISPropertyInputSourceID);
 
-    GroupMap::const_iterator i = m_groupMap.find(id);
-    if (i != m_groupMap.end()) {
-        return i->second;
+    for (SInt32 group = 0; group < (SInt32)m_groups.size(); ++group) {
+        CFDataRef groupID = (CFDataRef)TISGetInputSourceProperty(
+            m_groups[group], kTISPropertyInputSourceID);
+        if (id != NULL && groupID != NULL && CFEqual(id, groupID)) {
+            return group;
+        }
     }
 
     LOG((CLOG_DEBUG "can't get the active group, use the first group instead"));
