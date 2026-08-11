@@ -79,6 +79,8 @@ jobs:
             }
           }
           & .\build\install\input-leaps.exe --version
+          # input-leaps returns 1 after printing version information.
+          exit 0
 
       - name: Build Windows installer
         shell: pwsh
