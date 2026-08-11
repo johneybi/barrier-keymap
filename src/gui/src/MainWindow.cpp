@@ -621,7 +621,7 @@ void MainWindow::start_cmd_app()
     // launched the process (e.g. when launched with elevation). setting the
     // profile dir on launch ensures it uses the same profile dir is used
     // no matter how its relaunched.
-    args << "--profile-dir" << QString::fromStdString("\"" + inputleap::DataDirectories::profile().u8string() + "\"");
+    args << "--profile-dir" << QString::fromStdString(inputleap::DataDirectories::profile().u8string());
 #endif
 
     if ((app_role() == AppRole::Client && !clientArgs(args, app))
@@ -687,11 +687,6 @@ bool MainWindow::clientArgs(QStringList& args, QString& app)
                              tr("The executable for the InputLeap client does not exist."));
         return false;
     }
-
-#if defined(Q_OS_WIN)
-    // wrap in quotes so a malicious user can't start \Program.exe as admin.
-    app = QString("\"%1\"").arg(app);
-#endif
 
     if (appConfig().logToFile())
     {
@@ -791,11 +786,6 @@ bool MainWindow::serverArgs(QStringList& args, QString& app)
         return false;
     }
 
-#if defined(Q_OS_WIN)
-    // wrap in quotes so a malicious user can't start \Program.exe as admin.
-    app = QString("\"%1\"").arg(app);
-#endif
-
     if (appConfig().logToFile())
     {
         appConfig().persistLogDir();
@@ -808,10 +798,6 @@ bool MainWindow::serverArgs(QStringList& args, QString& app)
     }
 
     QString configFilename = this->configFilename();
-#if defined(Q_OS_WIN)
-    // wrap in quotes in case username contains spaces.
-    configFilename = QString("\"%1\"").arg(configFilename);
-#endif
     args << "-c" << configFilename << "--address" << address();
 
     return true;
