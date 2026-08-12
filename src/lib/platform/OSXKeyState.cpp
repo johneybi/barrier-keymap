@@ -57,6 +57,21 @@ static std::string getInputSourceString(TISInputSourceRef source, CFStringRef pr
     return buffer;
 }
 
+static bool currentInputSourceNeedsQuartzEvents()
+{
+    TISInputSourceRef source = TISCopyCurrentKeyboardInputSource();
+    if (source == nullptr) {
+        return false;
+    }
+
+    // Input methods such as Korean 2-Set do not expose a UCHR layout. They
+    // must see Quartz keyboard events in order to compose text correctly.
+    const bool needsQuartz = TISGetInputSourceProperty(
+        source, kTISPropertyUnicodeKeyLayoutData) == nullptr;
+    CFRelease(source);
+    return needsQuartz;
+}
+
 struct KeyEntry {
 public:
     KeyID                m_keyID;
@@ -602,6 +617,17 @@ void OSXKeyState::postHIDVirtualKey(const std::uint8_t virtualKeyCode, const boo
         break;
 
     default:
+        if (currentInputSourceNeedsQuartzEvents()) {
+            CGEventRef quartzEvent = CGEventCreateKeyboardEvent(
+                nullptr, virtualKeyCode, postDown);
+            if (quartzEvent != nullptr) {
+                CGEventSetFlags(quartzEvent, getModifierStateAsOSXFlags());
+                CGEventPost(kCGHIDEventTap, quartzEvent);
+                CFRelease(quartzEvent);
+            }
+            return;
+        }
+
         event.key.repeat = false;
         event.key.keyCode = virtualKeyCode;
         event.key.origCharSet = event.key.charSet = NX_ASCIISET;
