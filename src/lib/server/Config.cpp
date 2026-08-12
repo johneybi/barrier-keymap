@@ -62,7 +62,8 @@ std::string canonical_remap_key_name(const std::string& name)
         {"left_super", "Super_L"}, {"right_super", "Super_R"},
         {"left_command", "Super_L"}, {"right_command", "Super_R"},
         {"left_cmd", "Super_L"}, {"right_cmd", "Super_R"},
-        {"hangul", "Hangul"}, {"print_screen", "Print"}, {"space", "Space"}
+        {"hangul", "Hangul"}, {"print_screen", "Print"}, {"space", "Space"},
+        {"next_group", "\\uee08"}, {"prev_group", "\\uee09"}
     };
 
     const auto lower = to_lower(name);

@@ -131,8 +131,8 @@ void KeyRemapDialog::addMacPreset()
         return;
     }
 
-    addRow({screen, QStringLiteral("right_alt"), QStringLiteral("F16"), QStringLiteral("right_super")});
-    addRow({screen, QStringLiteral("hangul"), QStringLiteral("F16"), QStringLiteral("right_super")});
+    addRow({screen, QStringLiteral("right_alt"), QStringLiteral("next_group"), QStringLiteral("right_super")});
+    addRow({screen, QStringLiteral("hangul"), QStringLiteral("next_group"), QStringLiteral("right_super")});
     addRow({screen, QStringLiteral("control+c"), QStringLiteral("command+c"), QString()});
     addRow({screen, QStringLiteral("control+v"), QStringLiteral("command+v"), QString()});
     addRow({screen, QStringLiteral("print_screen"), QStringLiteral("command+shift+4"), QString()});

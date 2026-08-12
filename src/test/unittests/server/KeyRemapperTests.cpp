@@ -450,3 +450,27 @@ TEST(KeyRemapperTests, configReadsHangulSourceForWindowsKoreanRightAlt)
 	EXPECT_EQ(kKeyF19, rule->m_aloneID);
 	EXPECT_EQ(kKeySuper_R, rule->m_holdID);
 }
+
+TEST(KeyRemapperTests, configReadsNextGroupAliasForMacInputSourceSwitching)
+{
+	Config config;
+	std::stringstream stream;
+	stream
+		<< "section: screens\n"
+		<< "\tESKui-MacBookPro:\n"
+		<< "end\n"
+		<< "section: remaps\n"
+		<< "\tESKui-MacBookPro:\n"
+		<< "\t\thangul.alone = next_group\n"
+		<< "\t\thangul.hold = right_super\n"
+		<< "end\n";
+
+	stream >> config;
+
+	const KeyRemapConfig::TapRule* rule =
+		config.get_key_remap_config().findTapRule(
+			"ESKui-MacBookPro", kKeyHangul);
+	ASSERT_NE(nullptr, rule);
+	EXPECT_EQ(kKeyNextGroup, rule->m_aloneID);
+	EXPECT_EQ(kKeySuper_R, rule->m_holdID);
+}
