@@ -1621,7 +1621,9 @@ MSWindowsScreen::mapButtonFromEvent(WPARAM msg, LPARAM button) const
     case WM_NCXBUTTONDOWN:
     case WM_NCXBUTTONDBLCLK:
     case WM_NCXBUTTONUP:
-        switch (button) {
+        // Low-level mouse hooks store XBUTTON1/XBUTTON2 in the high word of
+        // mouseData. The low word is reserved and must not be compared.
+        switch (HIWORD(static_cast<DWORD>(button))) {
         case XBUTTON1:
             if (GetSystemMetrics(SM_CMOUSEBUTTONS) >= 4) {
                 return kButtonExtra0;
