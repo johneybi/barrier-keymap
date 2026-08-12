@@ -1625,16 +1625,10 @@ MSWindowsScreen::mapButtonFromEvent(WPARAM msg, LPARAM button) const
         // mouseData. The low word is reserved and must not be compared.
         switch (HIWORD(static_cast<DWORD>(button))) {
         case XBUTTON1:
-            if (GetSystemMetrics(SM_CMOUSEBUTTONS) >= 4) {
-                return kButtonExtra0;
-            }
-            break;
+            return kButtonExtra0;
 
         case XBUTTON2:
-            if (GetSystemMetrics(SM_CMOUSEBUTTONS) >= 5) {
-                return kButtonExtra1;
-            }
-            break;
+            return kButtonExtra1;
         }
         return kButtonNone;
 
