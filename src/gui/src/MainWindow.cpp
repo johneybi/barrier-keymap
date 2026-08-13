@@ -567,6 +567,16 @@ void MainWindow::start_cmd_app()
     bool desktopMode = appConfig().processMode() == Desktop;
     bool serviceMode = appConfig().processMode() == Service;
 
+    if (desktopMode && cmd_app_process_ != nullptr) {
+        if (cmd_app_process_->state() != QProcess::NotRunning) {
+            appendLogDebug("desktop process is already running");
+            return;
+        }
+
+        cmd_app_process_->deleteLater();
+        cmd_app_process_ = nullptr;
+    }
+
     appendLogDebug("starting process");
     m_ExpectedRunningState = kStarted;
     set_connection_state(AppConnectionState::CONNECTING);
@@ -874,6 +884,20 @@ void MainWindow::stopDesktop()
 
 void MainWindow::cmd_app_finished(int exitCode, QProcess::ExitStatus)
 {
+    auto* finishedProcess = qobject_cast<QProcess*>(sender());
+    if (finishedProcess != cmd_app_process_) {
+        appendLogDebug("ignoring exit from superseded desktop process");
+        if (finishedProcess != nullptr) {
+            finishedProcess->deleteLater();
+        }
+        return;
+    }
+
+    cmd_app_process_ = nullptr;
+    if (finishedProcess != nullptr) {
+        finishedProcess->deleteLater();
+    }
+
     if (exitCode == 0) {
         appendLogInfo(QString("process exited normally"));
     }
