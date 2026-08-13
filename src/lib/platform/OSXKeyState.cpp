@@ -26,6 +26,8 @@
 #include <CoreServices/CoreServices.h>
 #include <IOKit/hidsystem/IOHIDLib.h>
 
+#include <algorithm>
+
 namespace inputleap {
 
 static const std::uint32_t s_brightnessUp = 144;
@@ -910,6 +912,38 @@ OSXKeyState::getGroups(GroupList& groups) const
             groups.push_back(keyboardLayout);
         }
     }
+
+    // Input methods such as macOS 2-Set Korean expose their key layout through
+    // TISCopyCurrentKeyboardLayoutInputSource(), not through the input-source
+    // list above.  Include that layout so pollActiveGroup() can find it rather
+    // than silently falling back to group zero for every key event.
+    TISInputSourceRef currentLayout =
+        TISCopyCurrentKeyboardLayoutInputSource();
+    if (currentLayout != nullptr) {
+        const std::string currentId = getInputSourceString(
+            currentLayout, kTISPropertyInputSourceID);
+        const bool hasKeyLayout = TISGetInputSourceProperty(
+            currentLayout, kTISPropertyUnicodeKeyLayoutData) != nullptr;
+        const bool alreadyIncluded = std::any_of(
+            groups.begin(), groups.end(),
+            [&currentId](TISInputSourceRef group) {
+                return getInputSourceString(
+                    group, kTISPropertyInputSourceID) == currentId;
+            });
+
+        if (hasKeyLayout && !alreadyIncluded) {
+            LOG_DEBUG1("adding active macOS keyboard layout id=%s name=%s",
+                       currentId.c_str(),
+                       getInputSourceString(
+                           currentLayout,
+                           kTISPropertyLocalizedName).c_str());
+            groups.push_back(currentLayout);
+        }
+        else {
+            CFRelease(currentLayout);
+        }
+    }
+
     return true;
 }
 
