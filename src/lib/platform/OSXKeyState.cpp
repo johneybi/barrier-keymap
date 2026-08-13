@@ -57,21 +57,6 @@ static std::string getInputSourceString(TISInputSourceRef source, CFStringRef pr
     return buffer;
 }
 
-static bool currentInputSourceNeedsQuartzEvents()
-{
-    TISInputSourceRef source = TISCopyCurrentKeyboardInputSource();
-    if (source == nullptr) {
-        return false;
-    }
-
-    // Input methods such as Korean 2-Set do not expose a UCHR layout. They
-    // must see Quartz keyboard events in order to compose text correctly.
-    const bool needsQuartz = TISGetInputSourceProperty(
-        source, kTISPropertyUnicodeKeyLayoutData) == nullptr;
-    CFRelease(source);
-    return needsQuartz;
-}
-
 struct KeyEntry {
 public:
     KeyID                m_keyID;
@@ -617,25 +602,16 @@ void OSXKeyState::postHIDVirtualKey(const std::uint8_t virtualKeyCode, const boo
         break;
 
     default:
-        if (currentInputSourceNeedsQuartzEvents()) {
-            CGEventRef quartzEvent = CGEventCreateKeyboardEvent(
-                nullptr, virtualKeyCode, postDown);
-            if (quartzEvent != nullptr) {
-                CGEventSetFlags(quartzEvent, getModifierStateAsOSXFlags());
-                CGEventPost(kCGHIDEventTap, quartzEvent);
-                CFRelease(quartzEvent);
-            }
-            return;
+        // Do not change event-injection paths when the input source changes.
+        // Korean IMEs lose their composition state when a HID event sequence
+        // is followed by a Quartz event sequence (or vice versa).
+        CGEventRef quartzEvent = CGEventCreateKeyboardEvent(
+            nullptr, virtualKeyCode, postDown);
+        if (quartzEvent != nullptr) {
+            CGEventSetFlags(quartzEvent, getModifierStateAsOSXFlags());
+            CGEventPost(kCGHIDEventTap, quartzEvent);
+            CFRelease(quartzEvent);
         }
-
-        event.key.repeat = false;
-        event.key.keyCode = virtualKeyCode;
-        event.key.origCharSet = event.key.charSet = NX_ASCIISET;
-        event.key.origCharCode = event.key.charCode = 0;
-        kr = IOHIDPostEvent(getEventDriver(),
-                postDown ? NX_KEYDOWN : NX_KEYUP,
-                loc, &event, kNXEventDataVersion, 0, false);
-        assert(KERN_SUCCESS == kr);
         break;
     }
 }
