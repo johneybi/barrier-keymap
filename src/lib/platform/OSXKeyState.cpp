@@ -26,7 +26,6 @@
 #include <CoreServices/CoreServices.h>
 #include <IOKit/hidsystem/IOHIDLib.h>
 
-
 namespace inputleap {
 
 static const std::uint32_t s_brightnessUp = 144;
@@ -497,8 +496,45 @@ OSXKeyState::getKeyMap(inputleap::KeyMap& keyMap)
     }
 }
 
+static io_connect_t getEventDriver(void)
+{
+    static mach_port_t sEventDrvrRef = 0;
+    mach_port_t masterPort, service, iter;
+    kern_return_t kr;
+
+    if (!sEventDrvrRef) {
+        // Get master device port
+        kr = IOMasterPort(bootstrap_port, &masterPort);
+        assert(KERN_SUCCESS == kr);
+
+        kr = IOServiceGetMatchingServices(masterPort,
+                IOServiceMatching(kIOHIDSystemClass), &iter);
+        assert(KERN_SUCCESS == kr);
+
+        service = IOIteratorNext(iter);
+        assert(service);
+
+        kr = IOServiceOpen(service, mach_task_self(),
+                kIOHIDParamConnectType, &sEventDrvrRef);
+        assert(KERN_SUCCESS == kr);
+
+        IOObjectRelease(service);
+        IOObjectRelease(iter);
+    }
+
+    return sEventDrvrRef;
+}
+
 void OSXKeyState::postHIDVirtualKey(const std::uint8_t virtualKeyCode, const bool postDown)
 {
+    static std::uint32_t modifiers = 0;
+
+    NXEventData event;
+    IOGPoint loc = { 0, 0 };
+    std::uint32_t modifiersDelta = 0;
+
+    bzero(&event, sizeof(NXEventData));
+
     switch (virtualKeyCode)
     {
     case kVK_Shift:
@@ -513,45 +549,68 @@ void OSXKeyState::postHIDVirtualKey(const std::uint8_t virtualKeyCode, const boo
         switch (virtualKeyCode)
         {
         case kVK_Shift:
+                modifiersDelta = NX_SHIFTMASK | NX_DEVICELSHIFTKEYMASK;
                 m_shiftPressed = postDown;
                 break;
         case kVK_RightShift:
+                modifiersDelta = NX_SHIFTMASK | NX_DEVICERSHIFTKEYMASK;
                 m_shiftPressed = postDown;
                 break;
         case kVK_Command:
+                modifiersDelta = NX_COMMANDMASK | NX_DEVICELCMDKEYMASK;
                 m_superPressed = postDown;
                 break;
         case kVK_RightCommand:
+                modifiersDelta = NX_COMMANDMASK | NX_DEVICERCMDKEYMASK;
                 m_superPressed = postDown;
                 break;
         case kVK_Option:
+                modifiersDelta = NX_ALTERNATEMASK | NX_DEVICELALTKEYMASK;
                 m_altPressed = postDown;
                 break;
         case kVK_RightOption:
+                modifiersDelta = NX_ALTERNATEMASK | NX_DEVICERALTKEYMASK;
                 m_altPressed = postDown;
                 break;
         case kVK_Control:
+                modifiersDelta = NX_CONTROLMASK | NX_DEVICELCTLKEYMASK;
                 m_controlPressed = postDown;
                 break;
         case kVK_RightControl:
+                modifiersDelta = NX_CONTROLMASK | NX_DEVICERCTLKEYMASK;
                 m_controlPressed = postDown;
                 break;
         case kVK_CapsLock:
+                modifiersDelta = NX_ALPHASHIFTMASK;
                 m_capsPressed = postDown;
                 break;
         }
-        break;
-    }
 
-    // Keep modifiers and ordinary keys in the same event stream.  Mixing
-    // IOHIDPostEvent modifier events with Quartz text events breaks the
-    // composition state of macOS input methods such as Korean 2-Set.
-    CGEventRef quartzEvent = CGEventCreateKeyboardEvent(
-        nullptr, virtualKeyCode, postDown);
-    if (quartzEvent != nullptr) {
-        CGEventSetFlags(quartzEvent, getModifierStateAsOSXFlags());
-        CGEventPost(kCGHIDEventTap, quartzEvent);
-        CFRelease(quartzEvent);
+        // update the modifier bit
+        if (postDown) {
+            modifiers |= modifiersDelta;
+        }
+        else {
+            modifiers &= ~modifiersDelta;
+        }
+
+        kern_return_t kr;
+        event.key.keyCode = virtualKeyCode;
+        kr = IOHIDPostEvent(getEventDriver(), NX_FLAGSCHANGED, loc,
+                &event, kNXEventDataVersion, modifiers, true);
+        assert(KERN_SUCCESS == kr);
+        break;
+
+    default:
+        event.key.repeat = false;
+        event.key.keyCode = virtualKeyCode;
+        event.key.origCharSet = event.key.charSet = NX_ASCIISET;
+        event.key.origCharCode = event.key.charCode = 0;
+        kr = IOHIDPostEvent(getEventDriver(),
+                postDown ? NX_KEYDOWN : NX_KEYUP,
+                loc, &event, kNXEventDataVersion, 0, false);
+        assert(KERN_SUCCESS == kr);
+        break;
     }
 }
 
@@ -849,7 +908,6 @@ OSXKeyState::getGroups(GroupList& groups) const
             groups.push_back(keyboardLayout);
         }
     }
-
     return true;
 }
 
