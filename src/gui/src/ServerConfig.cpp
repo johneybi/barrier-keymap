@@ -276,8 +276,12 @@ QTextStream& operator<<(QTextStream& outStream, const ServerConfig& config)
 
     if (!config.keyRemaps().isEmpty()) {
         outStream << "section: remaps\n";
+        QSet<QString> remapScreens;
         for (const auto& remap : config.keyRemaps()) {
-            outStream << "\t" << remap.screen << ":\n";
+            if (!remapScreens.contains(remap.screen)) {
+                outStream << "\t" << remap.screen << ":\n";
+                remapScreens.insert(remap.screen);
+            }
             if (remap.holdOutput.isEmpty()) {
                 outStream << "\t\t" << remap.source << " = " << remap.output << "\n";
             }
