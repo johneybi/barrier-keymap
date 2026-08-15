@@ -1623,16 +1623,13 @@ MSWindowsScreen::mapButtonFromEvent(WPARAM msg, LPARAM button) const
     case WM_NCXBUTTONUP:
         switch (button) {
         case XBUTTON1:
-            if (GetSystemMetrics(SM_CMOUSEBUTTONS) >= 4) {
-                return kButtonExtra0;
-            }
-            break;
+            // WM_XBUTTON proves the device supplied an auxiliary button.
+            // Some drivers still report only three buttons through
+            // SM_CMOUSEBUTTONS, so do not discard the event based on it.
+            return kButtonExtra0;
 
         case XBUTTON2:
-            if (GetSystemMetrics(SM_CMOUSEBUTTONS) >= 5) {
-                return kButtonExtra1;
-            }
-            break;
+            return kButtonExtra1;
         }
         return kButtonNone;
 
