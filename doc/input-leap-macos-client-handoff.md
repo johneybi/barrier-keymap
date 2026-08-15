@@ -249,3 +249,25 @@ The current implementation filters source candidates by
 cycling enabled sources only and can select a disabled or irrelevant source.
 Confirm the captured current/target IDs and status first, then filter the list
 by both select-capable and enabled before rebuilding the macOS client.
+
+## 2026-08-15 macOS application IME boundary
+
+The installed macOS client had been stale: its embedded `input-leapc` reported
+`git-2026-08-13-c3d9d510`, although the source tree had already reverted the
+Quartz experiment. That binary mixed IOHID modifier events with Quartz ordinary
+key events, which is not an acceptable Korean IME baseline.
+
+The application was rebuilt and its embedded client replaced with
+`git-2026-08-15-62ef47b8`. This version sends both modifiers and ordinary keys
+through the original `IOHIDPostEvent` path. It connects to the Windows server
+normally, and Korean 2-Set composition is confirmed working in Chrome's
+address bar and YouTube search field.
+
+Safari still receives the same remote keystrokes as decomposed Hangul jamo.
+Because Chrome and Safari differ while the Windows remap, protocol packets, and
+macOS input-source state are identical, treat this as an application-specific
+limitation of direct IOHID event injection. Do not change the shared remapper
+or reintroduce mixed Quartz/IOHID delivery to target Safari: that would discard
+the working Chrome baseline. A universal Safari-compatible solution requires a
+separate virtual HID input device, which is a signed/entitled macOS product
+workstream rather than a server remap change.
