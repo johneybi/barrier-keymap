@@ -249,3 +249,65 @@ The current implementation filters source candidates by
 cycling enabled sources only and can select a disabled or irrelevant source.
 Confirm the captured current/target IDs and status first, then filter the list
 by both select-capable and enabled before rebuilding the macOS client.
+
+## 2026-08-15 Windows handoff: pending local installer approval
+
+Windows commit `9189c389` fixes an error in the Keymap GUI config writer. Before
+this fix, every saved remap opened a new screen block, for example:
+
+```text
+section: remaps
+    ESKui-MacBookPro:
+        right_alt.alone = \\uee08
+    ESKui-MacBookPro:
+        hangul.alone = \\uee08
+end
+```
+
+The Input Leap config grammar requires one screen block containing all of that
+screen's rules. The generated config now has exactly one block:
+
+```text
+section: remaps
+    ESKui-MacBookPro:
+        right_alt.alone = \\uee08
+        right_alt.hold = right_super
+        hangul.alone = \\uee08
+        hangul.hold = right_super
+        control+c = command+c
+        control+v = command+v
+        print_screen = command+shift+4
+end
+```
+
+The Windows and macOS package CI run for this commit succeeded. The Windows
+installer artifact is available locally as
+`releases/InputLeapKeymap-9189c389/InputLeapKeymapSetup-3.0.3-0.exe`.
+
+At handoff time, Windows had no `input-leap` or `input-leaps` process and no
+TCP listener on port `24800`: the installer is waiting for local Windows
+elevation approval. Do not diagnose a Mac connection timeout as a client
+failure until the Windows installer is accepted and the GUI server is running.
+
+After the Windows GUI is started, verify both sides in this order:
+
+1. Windows: `input-leaps.exe` owns TCP `24800` and has one established session
+   from the Mac.
+2. macOS: exactly one Input Leap client named `ESKui-MacBookPro` is running and
+   its log says it connected without a duplicate-name reconnect loop.
+3. Move the pointer to the Mac and press each physical side button once.
+
+The Windows branch already contains side-button forwarding fixes in `6c7b0388`
+and `7e634066`. Run the Windows GUI at `DEBUG1` only for this short test. The
+decisive Windows lines are:
+
+```text
+event: button press button=4
+event: button press button=5
+```
+
+If those lines are absent, the mouse driver is exposing its side buttons as
+browser keyboard keys rather than `XBUTTON1`/`XBUTTON2`; send the surrounding
+Windows DEBUG1 key log to the Windows owner. If the lines are present, capture
+the corresponding macOS client receive/fake-mouse-button log to distinguish
+network forwarding from Quartz event injection.
