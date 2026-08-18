@@ -270,9 +270,9 @@ screen's rules. The generated config now has exactly one block:
 ```text
 section: remaps
     ESKui-MacBookPro:
-        right_alt.alone = \\uee08
+        right_alt.alone = F19
         right_alt.hold = right_super
-        hangul.alone = \\uee08
+        hangul.alone = F19
         hangul.hold = right_super
         control+c = command+c
         control+v = command+v
