@@ -178,6 +178,8 @@ private:
     bool m_altPressed;
     bool m_superPressed;
     bool m_capsPressed;
+    void postUnicodeString(const std::u16string& str);
+    void postBackspace(int count);
 };
 
 } // namespace inputleap

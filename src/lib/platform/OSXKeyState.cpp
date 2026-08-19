@@ -24,6 +24,7 @@
 
 #include <Carbon/Carbon.h>
 #include <CoreServices/CoreServices.h>
+#include <dispatch/dispatch.h>
 #include <IOKit/hidsystem/IOHIDLib.h>
 
 namespace inputleap {
@@ -38,14 +39,39 @@ static const std::uint32_t s_osxNumLock = 1 << 16;
 static const std::uint32_t s_int4VK = 0x8a; // international4
 static const std::uint32_t s_int5VK = 0x8b; // international5
 
+template <typename Func>
+static auto runOnMainThread(Func&& func) -> decltype(func())
+{
+    if (pthread_main_np()) {
+        return func();
+    }
+    __block decltype(func()) result;
+    dispatch_sync(dispatch_get_main_queue(), ^{
+        result = func();
+    });
+    return result;
+}
+
+static void runOnMainThreadVoid(std::function<void()> func)
+{
+    if (pthread_main_np()) {
+        func();
+        return;
+    }
+    dispatch_sync(dispatch_get_main_queue(), ^{
+        func();
+    });
+}
+
 static std::string getInputSourceString(TISInputSourceRef source, CFStringRef property)
 {
     if (source == nullptr) {
         return "<none>";
     }
 
-    CFStringRef value = static_cast<CFStringRef>(
-        TISGetInputSourceProperty(source, property));
+    CFStringRef value = runOnMainThread([&]() {
+        return static_cast<CFStringRef>(TISGetInputSourceProperty(source, property));
+    });
     if (value == nullptr) {
         return "<unknown>";
     }
@@ -269,7 +295,9 @@ OSXKeyState::mapKeyFromEvent(KeyIDs& ids,
     }
 
     // get keyboard info
-    TISInputSourceRef currentKeyboardLayout = TISCopyCurrentKeyboardLayoutInputSource();
+    TISInputSourceRef currentKeyboardLayout = runOnMainThread([]() {
+        return TISCopyCurrentKeyboardLayoutInputSource();
+    });
 
     if (currentKeyboardLayout == nullptr) {
         return kKeyNone;
@@ -304,8 +332,9 @@ OSXKeyState::mapKeyFromEvent(KeyIDs& ids,
     }
 
     // translate via uchr resource
-    CFDataRef ref = (CFDataRef) TISGetInputSourceProperty(currentKeyboardLayout,
-                                kTISPropertyUnicodeKeyLayoutData);
+    CFDataRef ref = runOnMainThread([&]() {
+        return (CFDataRef)TISGetInputSourceProperty(currentKeyboardLayout, kTISPropertyUnicodeKeyLayoutData);
+    });
     const UCKeyboardLayout* layout = (const UCKeyboardLayout*) CFDataGetBytePtr(ref);
     const bool layoutValid = (layout != nullptr);
 
@@ -412,7 +441,9 @@ OSXKeyState::pollActiveModifiers() const
 
 std::int32_t OSXKeyState::pollActiveGroup() const
 {
-    TISInputSourceRef inputSource = TISCopyCurrentKeyboardLayoutInputSource();
+    TISInputSourceRef inputSource = runOnMainThread([]() {
+        return TISCopyCurrentKeyboardLayoutInputSource();
+    });
     const std::string id = getInputSourceString(
         inputSource, kTISPropertyInputSourceID);
 
@@ -424,8 +455,8 @@ std::int32_t OSXKeyState::pollActiveGroup() const
         return i->second;
     }
 
-    LOG_DEBUG("can't map active macOS keyboard layout id=%s, use first group",
-              id.c_str());
+    LOG_DEBUG1("can't map active macOS keyboard layout id=%s, use first group",
+               id.c_str());
     if (inputSource != nullptr) {
         CFRelease(inputSource);
     }
@@ -476,8 +507,9 @@ OSXKeyState::getKeyMap(inputleap::KeyMap& keyMap)
 
         // add regular keys
         // try uchr resource first
-        CFDataRef resourceRef = (CFDataRef)TISGetInputSourceProperty(
-            m_groups[g], kTISPropertyUnicodeKeyLayoutData);
+        CFDataRef resourceRef = runOnMainThread([&]() {
+            return (CFDataRef)TISGetInputSourceProperty(m_groups[g], kTISPropertyUnicodeKeyLayoutData);
+        });
 
         layoutValid = resourceRef != nullptr;
         if (layoutValid)
@@ -523,6 +555,66 @@ static io_connect_t getEventDriver(void)
     }
 
     return sEventDrvrRef;
+}
+
+static std::uint16_t mapVirtualKeyToCharCode(std::uint8_t vk, bool shift)
+{
+    switch (vk) {
+    case kVK_ANSI_A: return shift ? 'A' : 'a';
+    case kVK_ANSI_B: return shift ? 'B' : 'b';
+    case kVK_ANSI_C: return shift ? 'C' : 'c';
+    case kVK_ANSI_D: return shift ? 'D' : 'd';
+    case kVK_ANSI_E: return shift ? 'E' : 'e';
+    case kVK_ANSI_F: return shift ? 'F' : 'f';
+    case kVK_ANSI_G: return shift ? 'G' : 'g';
+    case kVK_ANSI_H: return shift ? 'H' : 'h';
+    case kVK_ANSI_I: return shift ? 'I' : 'i';
+    case kVK_ANSI_J: return shift ? 'J' : 'j';
+    case kVK_ANSI_K: return shift ? 'K' : 'k';
+    case kVK_ANSI_L: return shift ? 'L' : 'l';
+    case kVK_ANSI_M: return shift ? 'M' : 'm';
+    case kVK_ANSI_N: return shift ? 'N' : 'n';
+    case kVK_ANSI_O: return shift ? 'O' : 'o';
+    case kVK_ANSI_P: return shift ? 'P' : 'p';
+    case kVK_ANSI_Q: return shift ? 'Q' : 'q';
+    case kVK_ANSI_R: return shift ? 'R' : 'r';
+    case kVK_ANSI_S: return shift ? 'S' : 's';
+    case kVK_ANSI_T: return shift ? 'T' : 't';
+    case kVK_ANSI_U: return shift ? 'U' : 'u';
+    case kVK_ANSI_V: return shift ? 'V' : 'v';
+    case kVK_ANSI_W: return shift ? 'W' : 'w';
+    case kVK_ANSI_X: return shift ? 'X' : 'x';
+    case kVK_ANSI_Y: return shift ? 'Y' : 'y';
+    case kVK_ANSI_Z: return shift ? 'Z' : 'z';
+
+    case kVK_ANSI_1: return shift ? '!' : '1';
+    case kVK_ANSI_2: return shift ? '@' : '2';
+    case kVK_ANSI_3: return shift ? '#' : '3';
+    case kVK_ANSI_4: return shift ? '$' : '4';
+    case kVK_ANSI_5: return shift ? '%' : '5';
+    case kVK_ANSI_6: return shift ? '^' : '6';
+    case kVK_ANSI_7: return shift ? '&' : '7';
+    case kVK_ANSI_8: return shift ? '*' : '8';
+    case kVK_ANSI_9: return shift ? '(' : '9';
+    case kVK_ANSI_0: return shift ? ')' : '0';
+
+    case kVK_ANSI_Equal: return shift ? '+' : '=';
+    case kVK_ANSI_Minus: return shift ? '_' : '-';
+    case kVK_ANSI_RightBracket: return shift ? '}' : ']';
+    case kVK_ANSI_LeftBracket: return shift ? '{' : '[';
+    case kVK_ANSI_Quote: return shift ? '"' : '\'';
+    case kVK_ANSI_Semicolon: return shift ? ':' : ';';
+    case kVK_ANSI_Backslash: return shift ? '|' : '\\';
+    case kVK_ANSI_Comma: return shift ? '<' : ',';
+    case kVK_ANSI_Slash: return shift ? '?' : '/';
+    case kVK_ANSI_Period: return shift ? '>' : '.';
+    case kVK_ANSI_Grave: return shift ? '~' : '`';
+    case kVK_Space: return ' ';
+    case kVK_Return: return '\r';
+    case kVK_Tab: return '\t';
+    case kVK_Delete: return '\b';
+    default: return 0;
+    }
 }
 
 void OSXKeyState::postHIDVirtualKey(const std::uint8_t virtualKeyCode, const bool postDown)
@@ -605,12 +697,42 @@ void OSXKeyState::postHIDVirtualKey(const std::uint8_t virtualKeyCode, const boo
         event.key.repeat = false;
         event.key.keyCode = virtualKeyCode;
         event.key.origCharSet = event.key.charSet = NX_ASCIISET;
-        event.key.origCharCode = event.key.charCode = 0;
+        {
+            std::uint16_t ch = mapVirtualKeyToCharCode(virtualKeyCode, m_shiftPressed);
+            event.key.origCharCode = event.key.charCode = ch;
+        }
         kr = IOHIDPostEvent(getEventDriver(),
                 postDown ? NX_KEYDOWN : NX_KEYUP,
                 loc, &event, kNXEventDataVersion, 0, false);
         assert(KERN_SUCCESS == kr);
         break;
+    }
+}
+
+void OSXKeyState::postBackspace(int count)
+{
+    for (int i = 0; i < count; ++i) {
+        postHIDVirtualKey(kVK_Delete, true);
+        postHIDVirtualKey(kVK_Delete, false);
+    }
+}
+
+void OSXKeyState::postUnicodeString(const std::u16string& str)
+{
+    for (char16_t ch : str) {
+        UniChar u = static_cast<UniChar>(ch);
+        CGEventRef down = CGEventCreateKeyboardEvent(nullptr, 0, true);
+        if (down != nullptr) {
+            CGEventKeyboardSetUnicodeString(down, 1, &u);
+            CGEventPost(kCGHIDEventTap, down);
+            CFRelease(down);
+        }
+        CGEventRef up = CGEventCreateKeyboardEvent(nullptr, 0, false);
+        if (up != nullptr) {
+            CGEventKeyboardSetUnicodeString(up, 1, &u);
+            CGEventPost(kCGHIDEventTap, up);
+            CFRelease(up);
+        }
     }
 }
 
@@ -880,7 +1002,9 @@ OSXKeyState::getGroups(GroupList& groups) const
     CFStringRef keys[] = { kTISPropertyInputSourceCategory };
     CFStringRef values[] = { kTISCategoryKeyboardInputSource };
     CFDictionaryRef dict = CFDictionaryCreate(nullptr, (const void **)keys, (const void **)values, 1, nullptr, nullptr);
-    CFArrayRef kbds = TISCreateInputSourceList(dict, false);
+    CFArrayRef kbds = runOnMainThread([&]() {
+        return TISCreateInputSourceList(dict, false);
+    });
     n = CFArrayGetCount(kbds);
     gotLayouts = (n != 0);
 
@@ -895,8 +1019,9 @@ OSXKeyState::getGroups(GroupList& groups) const
         TISInputSourceRef keyboardLayout =
             (TISInputSourceRef)CFArrayGetValueAtIndex(kbds, i);
 
-        const bool hasKeyLayout = TISGetInputSourceProperty(
-            keyboardLayout, kTISPropertyUnicodeKeyLayoutData) != nullptr;
+        const bool hasKeyLayout = runOnMainThread([&]() {
+            return TISGetInputSourceProperty(keyboardLayout, kTISPropertyUnicodeKeyLayoutData) != nullptr;
+        });
         LOG_DEBUG1("macOS keyboard layout candidate id=%s name=%s keymap=%s",
                    getInputSourceString(
                        keyboardLayout, kTISPropertyInputSourceID).c_str(),
@@ -922,7 +1047,9 @@ void OSXKeyState::setGroup(std::int32_t group)
     TISInputSourceRef target = m_groups[group];
     const std::string targetId = getInputSourceString(
         target, kTISPropertyInputSourceID);
-    TISSetInputMethodKeyboardLayoutOverride(target);
+    runOnMainThreadVoid([&]() {
+        TISSetInputMethodKeyboardLayoutOverride(target);
+    });
 
     LOG_DEBUG1("set macOS keyboard layout group=%d target=%s",
                group, targetId.c_str());
@@ -935,7 +1062,9 @@ void OSXKeyState::cycleInputSource(std::int32_t offset)
     CFDictionaryRef filter = CFDictionaryCreate(
         nullptr, reinterpret_cast<const void **>(keys),
         reinterpret_cast<const void **>(values), 1, nullptr, nullptr);
-    CFArrayRef sources = TISCreateInputSourceList(filter, false);
+    CFArrayRef sources = runOnMainThread([&]() {
+        return TISCreateInputSourceList(filter, false);
+    });
     CFRelease(filter);
 
     std::vector<TISInputSourceRef> selectableSources;
@@ -943,9 +1072,9 @@ void OSXKeyState::cycleInputSource(std::int32_t offset)
     for (CFIndex i = 0; i < count; ++i) {
         TISInputSourceRef source = static_cast<TISInputSourceRef>(
             const_cast<void *>(CFArrayGetValueAtIndex(sources, i)));
-        CFBooleanRef selectCapable = static_cast<CFBooleanRef>(
-            TISGetInputSourceProperty(
-                source, kTISPropertyInputSourceIsSelectCapable));
+        CFBooleanRef selectCapable = runOnMainThread([&]() {
+            return static_cast<CFBooleanRef>(TISGetInputSourceProperty(source, kTISPropertyInputSourceIsSelectCapable));
+        });
         if (selectCapable == kCFBooleanTrue) {
             selectableSources.push_back(source);
         }
@@ -957,7 +1086,9 @@ void OSXKeyState::cycleInputSource(std::int32_t offset)
         return;
     }
 
-    TISInputSourceRef current = TISCopyCurrentKeyboardInputSource();
+    TISInputSourceRef current = runOnMainThread([]() {
+        return TISCopyCurrentKeyboardInputSource();
+    });
     const std::string currentId = getInputSourceString(
         current, kTISPropertyInputSourceID);
     std::int32_t currentIndex = 0;
@@ -977,7 +1108,9 @@ void OSXKeyState::cycleInputSource(std::int32_t offset)
     TISInputSourceRef target = selectableSources[targetIndex];
     const std::string targetId = getInputSourceString(
         target, kTISPropertyInputSourceID);
-    const OSStatus status = TISSelectInputSource(target);
+    const OSStatus status = runOnMainThread([&]() {
+        return TISSelectInputSource(target);
+    });
 
     LOG_DEBUG1("cycle macOS input source offset=%+d current=%s target=%s status=%d",
                offset, currentId.c_str(), targetId.c_str(),
