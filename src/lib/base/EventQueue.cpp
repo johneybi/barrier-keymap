@@ -449,8 +449,8 @@ EventQueue::waitForReady() const
 {
     std::unique_lock<std::mutex> lock(ready_mutex_);
 
-    if (!ready_cv_.wait_for(lock, std::chrono::seconds{10}, [this](){ return is_ready_; })) {
-        throw std::runtime_error("event queue is not ready within 5 sec");
+    if (!ready_cv_.wait_for(lock, std::chrono::seconds{15}, [this](){ return is_ready_; })) {
+        throw std::runtime_error("event queue is not ready within 15 sec");
     }
 }
 

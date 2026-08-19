@@ -1648,7 +1648,12 @@ void OSXScreen::watchSystemPowerThread()
 	LOG_DEBUG("started watchSystemPowerThread");
 
 	LOG_DEBUG("waiting for event loop");
-	m_events->waitForReady();
+	try {
+		m_events->waitForReady();
+	}
+	catch (const std::exception& e) {
+		LOG_WARN("watchSystemPowerThread waitForReady exception: %s", e.what());
+	}
 
 #if defined(MAC_OS_X_VERSION_10_7)
     {
