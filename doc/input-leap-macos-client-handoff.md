@@ -350,3 +350,30 @@ defaults write org.youknowone.Gureum InputModeExchangeKey \\
 The F19 handler consumes the command in Gureum, so it does not appear as text in
 the browser. The previous source-switch and synthetic Right Option workarounds
 were removed because they tried to infer or mutate another app's IME state.
+
+## 2026-08-20 Windows F19 boundary verified
+
+The Windows server was run with the generated config and DEBUG1 logging while
+the Mac client was connected. The generated remap and the transmitted key were
+confirmed at the protocol boundary:
+
+```text
+onKeyDown id=61233 ... button=0x0138
+key remap pending tap ... key=\\uef31 alone=F19 hold=Super_R
+key remap tap ... key=\\uef31->F19
+send key down ... id=61392
+send key up ... id=61392
+```
+
+The current Windows config is therefore not sending Control+Space,
+Right Option, or NextGroup for the Korean Right Alt tap. It sends F19.
+The next required macOS-side log line is:
+
+```text
+F19 received current=... trackedGureum=... sourceGureum=...
+```
+
+If that line is absent, verify that exactly one client is running and that its
+embedded input-leapc is built from the macOS F19/Gureum chain ending at
+903421b4. Do not change the Windows remap again until the Mac client has
+confirmed receipt of F19.
