@@ -120,6 +120,10 @@ static const KeyEntry    s_controlKeys[] = {
     { kKeyF14,        kVK_F14 },
     { kKeyF15,        kVK_F15 },
     { kKeyF16,        kVK_F16 },
+    { kKeyF17,        kVK_F17 },
+    { kKeyF18,        kVK_F18 },
+    { kKeyF19,        kVK_F19 },
+    { kKeyF20,        kVK_F20 },
 
     { kKeyKP_0,        kVK_ANSI_Keypad0 },
     { kKeyKP_1,        kVK_ANSI_Keypad1 },
@@ -709,6 +713,10 @@ OSXKeyState::fakeKey(const Keystroke& keystroke)
                 const bool gureumActive =
                     currentId.find("org.youknowone.inputmethod.Gureum") !=
                     std::string::npos;
+                LOG_INFO("F19 received current=%s trackedGureum=%s sourceGureum=%s",
+                         currentId.c_str(),
+                         m_gureumInputSourceActive ? "yes" : "no",
+                         gureumActive ? "yes" : "no");
                 if (current != nullptr) {
                     CFRelease(current);
                 }
@@ -722,12 +730,14 @@ OSXKeyState::fakeKey(const Keystroke& keystroke)
                         // input session has finished switching. Waiting here
                         // prevents the first character from racing activation.
                         LOG_DEBUG1("selected Gureum han2; waiting for input session activation");
+                        LOG_INFO("F19 selected Gureum han2; F19 toggle not sent");
                         this_thread_sleep(0.075);
                     }
                 }
                 else {
                     LOG_DEBUG1("passing F19 to active Gureum input method current=%s",
                                currentId.c_str());
+                    LOG_INFO("F19 sent to Gureum input method");
                     postHIDVirtualKey(kVK_F19, true);
                     postHIDVirtualKey(kVK_F19, false);
                 }
