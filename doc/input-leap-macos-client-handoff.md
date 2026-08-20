@@ -276,15 +276,16 @@ workstream rather than a server remap change.
 
 Selecting `org.youknowone.inputmethod.Gureum.han2` is not sufficient for every
 browser text client because Gureum can retain a Roman/Hangul composer state per
-client. The macOS client now keeps Gureum active and sends F19 as a normal key
-to Gureum's own per-client mode toggle. On this Mac, that command is configured
-as:
+client. The macOS client now keeps Gureum active and translates F19 to Gureum's
+standard Shift+Space per-client mode toggle. On this Mac, that command is
+configured as:
 
 ```text
 defaults write org.youknowone.Gureum InputModeExchangeKey \\
-  -dict modifier -int 0 keyCode -int 80
+  -dict modifier -int 131072 keyCode -int 49
 ```
 
-The F19 handler consumes the command in Gureum, so it does not appear as text in
-the browser. The previous source-switch and synthetic Right Option workarounds
-were removed because they tried to infer or mutate another app's IME state.
+The F19 handler consumes the Shift+Space command in Gureum, so it does not
+appear as text in the browser. The previous source-switch and synthetic Right
+Option workarounds were removed because they tried to infer or mutate another
+app's IME state.
