@@ -685,11 +685,22 @@ OSXKeyState::fakeKey(const Keystroke& keystroke)
 
         KeyButton button = keystroke.m_data.m_button.m_button;
         bool keyDown = keystroke.m_data.m_button.m_press;
+        bool repeat = keystroke.m_data.m_button.m_repeat;
         CGKeyCode virtualKey = mapKeyButtonToVirtualKey(button);
 
         LOG_DEBUG1(
             "  button=0x%04x virtualKey=0x%04x keyDown=%s",
             button, virtualKey, keyDown ? "down" : "up");
+
+        // F19 is the dedicated macOS target for the Windows Right Alt tap.
+        // Treat it as an input-source command instead of posting a function
+        // key that third-party input methods such as Gureum do not consume.
+        if (virtualKey == kVK_F19) {
+            if (keyDown && !repeat) {
+                cycleInputSource(1);
+            }
+            break;
+        }
 
         postHIDVirtualKey(virtualKey, keyDown);
 
