@@ -11,8 +11,11 @@ binary="$1"
 app="$2"
 contents="$app/Contents"
 version="${INPUTLEAP_KEYMAP_VERSION:-3.0.3}"
-bundle_id="com.johneybi.input-leap-keymap.client"
 use_vhid="${INPUTLEAP_USE_KARABINER_VHID:-0}"
+bundle_id="com.johneybi.input-leap-keymap.client"
+if [ "$use_vhid" = "1" ]; then
+    bundle_id="com.johneybi.input-leap-keymap.vhid"
+fi
 
 rm -rf "$app"
 mkdir -p "$contents/MacOS" "$contents/Resources"

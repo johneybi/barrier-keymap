@@ -12,10 +12,13 @@ client="$2"
 server="$3"
 app="$4"
 contents="$app/Contents"
-bundle_id="com.johneybi.input-leap-keymap.client"
 version="${INPUTLEAP_KEYMAP_VERSION:-3.0.3}"
 macdeployqt="${MACDEPLOYQT:-}"
 use_vhid="${INPUTLEAP_USE_KARABINER_VHID:-0}"
+bundle_id="com.johneybi.input-leap-keymap.client"
+if [ "$use_vhid" = "1" ]; then
+    bundle_id="com.johneybi.input-leap-keymap.vhid"
+fi
 
 if [ -z "$macdeployqt" ]; then
     macdeployqt="$(command -v macdeployqt || true)"

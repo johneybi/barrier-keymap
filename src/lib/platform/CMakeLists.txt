@@ -23,7 +23,10 @@ if (BUILD_CARBON)
     file(GLOB carbon_sources "OSX*.cpp" "IOSX*.cpp" "OSX*.m" "OSX*.mm")
     if (APPLE AND INPUTLEAP_USE_KARABINER_VHID)
         list(APPEND carbon_headers "KarabinerVirtualHIDKeyboard.h")
-        list(APPEND carbon_sources "KarabinerVirtualHIDKeyboard.cpp")
+        list(APPEND carbon_headers "KarabinerVirtualHIDKeyboardService.h")
+        list(APPEND carbon_sources
+            "KarabinerVirtualHIDKeyboard.cpp"
+            "KarabinerVirtualHIDKeyboardProxy.cpp")
         set_source_files_properties(
             "KarabinerVirtualHIDKeyboard.cpp"
             PROPERTIES COMPILE_OPTIONS "-std=c++23")

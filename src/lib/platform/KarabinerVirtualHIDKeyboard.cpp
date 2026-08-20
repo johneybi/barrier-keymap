@@ -8,7 +8,7 @@
  * of the License, or (at your option) any later version.
  */
 
-#include "platform/KarabinerVirtualHIDKeyboard.h"
+#include "platform/KarabinerVirtualHIDKeyboardService.h"
 
 #include "base/Log.h"
 
@@ -21,14 +21,20 @@
 
 #include <atomic>
 #include <chrono>
+#include <cerrno>
+#include <cstring>
 #include <mutex>
 #include <optional>
 #include <set>
+#include <sys/socket.h>
+#include <sys/stat.h>
+#include <sys/un.h>
 #include <thread>
+#include <unistd.h>
 
 namespace inputleap {
 
-class KarabinerVirtualHIDKeyboard::Impl {
+class KarabinerVirtualHIDKeyboardService::Impl {
 public:
     using Client = pqrs::karabiner::driverkit::virtual_hid_device_service::client;
     using Parameters = pqrs::karabiner::driverkit::virtual_hid_device_service::virtual_hid_keyboard_parameters;
@@ -256,26 +262,95 @@ private:
     bool m_dispatcherStarted = false;
 };
 
-KarabinerVirtualHIDKeyboard::KarabinerVirtualHIDKeyboard() :
+KarabinerVirtualHIDKeyboardService::KarabinerVirtualHIDKeyboardService() :
     m_impl(std::make_unique<Impl>())
 {
 }
 
-KarabinerVirtualHIDKeyboard::~KarabinerVirtualHIDKeyboard() = default;
+KarabinerVirtualHIDKeyboardService::~KarabinerVirtualHIDKeyboardService() = default;
 
-void KarabinerVirtualHIDKeyboard::start()
+void KarabinerVirtualHIDKeyboardService::start()
 {
     m_impl->start();
 }
 
-bool KarabinerVirtualHIDKeyboard::isReady() const
+bool KarabinerVirtualHIDKeyboardService::isReady() const
 {
     return m_impl->isReady();
 }
 
-bool KarabinerVirtualHIDKeyboard::postKey(std::uint8_t virtualKeyCode, bool down)
+bool KarabinerVirtualHIDKeyboardService::postKey(std::uint8_t virtualKeyCode, bool down)
 {
     return m_impl->postKey(virtualKeyCode, down);
+}
+
+int runKarabinerVirtualHIDKeyboardService(const char* socketPath, unsigned int ownerUid)
+{
+    if (socketPath == nullptr || *socketPath == '\0') {
+        return 2;
+    }
+
+    const int socketFd = socket(AF_UNIX, SOCK_DGRAM, 0);
+    if (socketFd < 0) {
+        return 1;
+    }
+
+    sockaddr_un address{};
+    address.sun_family = AF_UNIX;
+    if (std::strlen(socketPath) >= sizeof(address.sun_path)) {
+        close(socketFd);
+        return 2;
+    }
+    std::strncpy(address.sun_path, socketPath, sizeof(address.sun_path) - 1);
+    unlink(socketPath);
+
+    if (bind(socketFd, reinterpret_cast<const sockaddr*>(&address), sizeof(address)) < 0) {
+        close(socketFd);
+        return 1;
+    }
+    chmod(socketPath, 0600);
+    if (chown(socketPath, static_cast<uid_t>(ownerUid), static_cast<gid_t>(-1)) < 0) {
+        close(socketFd);
+        unlink(socketPath);
+        return 1;
+    }
+
+    Arch arch;
+    arch.init();
+    Log log;
+    KarabinerVirtualHIDKeyboardService keyboard;
+    keyboard.start();
+
+    const auto readyDeadline = std::chrono::steady_clock::now() +
+                               std::chrono::seconds(10);
+    while (!keyboard.isReady() &&
+           std::chrono::steady_clock::now() < readyDeadline) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    }
+
+    if (!keyboard.isReady()) {
+        close(socketFd);
+        unlink(socketPath);
+        return 1;
+    }
+
+    std::uint8_t packet[2];
+    while (true) {
+        const ssize_t received = recv(socketFd, packet, sizeof(packet), 0);
+        if (received < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+            break;
+        }
+        if (received == sizeof(packet)) {
+            keyboard.postKey(packet[0], packet[1] != 0);
+        }
+    }
+
+    close(socketFd);
+    unlink(socketPath);
+    return 0;
 }
 
 } // namespace inputleap

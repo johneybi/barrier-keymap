@@ -21,6 +21,14 @@
 #include "base/Log.h"
 #include "base/EventQueue.h"
 
+#if defined(INPUTLEAP_USE_KARABINER_VHID)
+#include "platform/KarabinerVirtualHIDKeyboardService.h"
+#include <cerrno>
+#include <cstring>
+#include <cstdlib>
+#include <limits>
+#endif
+
 #if WINAPI_MSWINDOWS
 #include "MSWindowsClientTaskBarReceiver.h"
 #endif
@@ -59,5 +67,18 @@ int client_main(int argc, char** argv)
 
 int main(int argc, char** argv)
 {
+#if defined(INPUTLEAP_USE_KARABINER_VHID)
+    if (argc == 4 && std::strcmp(argv[1], "--karabiner-vhid-helper") == 0) {
+        errno = 0;
+        char* end = nullptr;
+        const unsigned long ownerUid = std::strtoul(argv[3], &end, 10);
+        if (errno != 0 || end == argv[3] || *end != '\0' ||
+            ownerUid > std::numeric_limits<unsigned int>::max()) {
+            return 2;
+        }
+        return inputleap::runKarabinerVirtualHIDKeyboardService(
+            argv[2], static_cast<unsigned int>(ownerUid));
+    }
+#endif
     return inputleap::client_main(argc, argv);
 }
