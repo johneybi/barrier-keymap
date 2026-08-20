@@ -1009,6 +1009,10 @@ void OSXKeyState::setGroup(std::int32_t group)
 
 void OSXKeyState::cycleInputSource(std::int32_t offset)
 {
+    const std::string abcId = "com.apple.keylayout.ABC";
+    const std::string gureumHangulId =
+        "org.youknowone.inputmethod.Gureum.han2";
+
     CFStringRef keys[] = { kTISPropertyInputSourceCategory };
     CFStringRef values[] = { kTISCategoryKeyboardInputSource };
     CFDictionaryRef filter = CFDictionaryCreate(
@@ -1074,9 +1078,6 @@ void OSXKeyState::cycleInputSource(std::int32_t offset)
     // for other configurations.
     TISInputSourceRef target = nullptr;
     if (offset == 1) {
-        const std::string abcId = "com.apple.keylayout.ABC";
-        const std::string gureumHangulId =
-            "org.youknowone.inputmethod.Gureum.han2";
         const std::string desiredId = currentId == gureumHangulId
             ? abcId
             : gureumHangulId;
@@ -1109,6 +1110,16 @@ void OSXKeyState::cycleInputSource(std::int32_t offset)
     LOG_DEBUG1("cycle macOS input source offset=%+d current=%s target=%s status=%d",
                offset, currentId.c_str(), targetId.c_str(),
                static_cast<int>(status));
+
+    // Gureum can keep a separate Roman/Hangul composer state for each text
+    // client. Selecting its han2 input mode does not always update that state
+    // in browser text fields, so use Gureum's right-key command as well.
+    if (status == noErr && offset == 1 && targetId == gureumHangulId &&
+        currentId != gureumHangulId) {
+        LOG_DEBUG1("requesting Gureum Hangul mode with right Option command");
+        postHIDVirtualKey(kVK_RightOption, true);
+        postHIDVirtualKey(kVK_RightOption, false);
+    }
 
     if (current != nullptr) {
         CFRelease(current);
