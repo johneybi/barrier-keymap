@@ -204,7 +204,6 @@ OSXKeyState::init()
     m_altPressed = false;
     m_superPressed = false;
     m_capsPressed = false;
-    m_gureumInputSourceActive = false;
 
     // build virtual key map
     for (size_t i = 0; i < sizeof(s_controlKeys) / sizeof(s_controlKeys[0]);
@@ -713,19 +712,13 @@ OSXKeyState::fakeKey(const Keystroke& keystroke)
                 const bool gureumActive =
                     currentId.find("org.youknowone.inputmethod.Gureum") !=
                     std::string::npos;
-                LOG_INFO("F19 received current=%s trackedGureum=%s sourceGureum=%s",
-                         currentId.c_str(),
-                         m_gureumInputSourceActive ? "yes" : "no",
-                         gureumActive ? "yes" : "no");
+                LOG_INFO("F19 received current=%s sourceGureum=%s",
+                         currentId.c_str(), gureumActive ? "yes" : "no");
                 if (current != nullptr) {
                     CFRelease(current);
                 }
-                if (gureumActive) {
-                    m_gureumInputSourceActive = true;
-                }
-                if (!m_gureumInputSourceActive) {
+                if (!gureumActive) {
                     if (cycleInputSource(1)) {
-                        m_gureumInputSourceActive = true;
                         // TISSelectInputSource returns before the active app's
                         // input session has finished switching. Waiting here
                         // prevents the first character from racing activation.
