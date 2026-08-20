@@ -20,9 +20,14 @@
 
 #include "inputleap/KeyState.h"
 
+#if defined(INPUTLEAP_USE_KARABINER_VHID)
+#include "platform/KarabinerVirtualHIDKeyboard.h"
+#endif
+
 #include <Carbon/Carbon.h>
 
 #include <map>
+#include <memory>
 #include <set>
 #include <string>
 #include <vector>
@@ -178,6 +183,9 @@ private:
     bool m_altPressed;
     bool m_superPressed;
     bool m_capsPressed;
+#if defined(INPUTLEAP_USE_KARABINER_VHID)
+    std::unique_ptr<KarabinerVirtualHIDKeyboard> m_karabinerVirtualKeyboard;
+#endif
     void postUnicodeString(const std::u16string& str);
     void postBackspace(int count);
 };

@@ -25,6 +25,9 @@ option(INPUTLEAP_BUILD_X11 "Build with XWindows support" ON)
 option(INPUTLEAP_BUILD_LIBEI "Build with libei support" OFF)
 option(INPUTLEAP_BUILD_GULRAK_FILESYSTEM "Use internal filesystem library" OFF)
 option(INPUTLEAP_BUILD_AUDIO_DAEMON "Build the separate audio relay process" OFF)
+option(INPUTLEAP_USE_KARABINER_VHID "Use Karabiner's keyboard-only Virtual HID output on macOS" OFF)
+set(INPUTLEAP_KARABINER_VHID_ROOT "" CACHE PATH
+    "Karabiner-DriverKit-VirtualHIDDevice source tree for Virtual HID headers")
 set (CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set (CMAKE_CXX_EXTENSIONS OFF)
 set (CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -193,6 +196,18 @@ if (UNIX)
     list (APPEND libs Threads::Threads)
 
     if (APPLE)
+        if (INPUTLEAP_USE_KARABINER_VHID)
+            if (NOT INPUTLEAP_KARABINER_VHID_ROOT)
+                message(FATAL_ERROR
+                    "INPUTLEAP_KARABINER_VHID_ROOT is required when "
+                    "INPUTLEAP_USE_KARABINER_VHID is enabled")
+            endif()
+            include_directories(
+                "${INPUTLEAP_KARABINER_VHID_ROOT}/include"
+                "${INPUTLEAP_KARABINER_VHID_ROOT}/vendor/vendor/include")
+            add_compile_definitions(INPUTLEAP_USE_KARABINER_VHID)
+        endif()
+
         set (CMAKE_CXX_FLAGS "--sysroot ${CMAKE_OSX_SYSROOT} ${CMAKE_CXX_FLAGS} -DGTEST_USE_OWN_TR1_TUPLE=1")
 
         find_library (lib_ScreenSaver ScreenSaver)

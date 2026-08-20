@@ -205,6 +205,11 @@ OSXKeyState::init()
     m_superPressed = false;
     m_capsPressed = false;
 
+#if defined(INPUTLEAP_USE_KARABINER_VHID)
+    m_karabinerVirtualKeyboard = std::make_unique<KarabinerVirtualHIDKeyboard>();
+    m_karabinerVirtualKeyboard->start();
+#endif
+
     // build virtual key map
     for (size_t i = 0; i < sizeof(s_controlKeys) / sizeof(s_controlKeys[0]);
         ++i) {
@@ -647,6 +652,13 @@ void OSXKeyState::postHIDVirtualKey(const std::uint8_t virtualKeyCode, const boo
         break;
     }
 
+#if defined(INPUTLEAP_USE_KARABINER_VHID)
+    if (m_karabinerVirtualKeyboard != nullptr &&
+        m_karabinerVirtualKeyboard->postKey(virtualKeyCode, postDown)) {
+        return;
+    }
+#endif
+
     CGEventRef quartzEvent = CGEventCreateKeyboardEvent(nullptr, virtualKeyCode, postDown);
     if (quartzEvent != nullptr) {
         CGEventSetFlags(quartzEvent, getModifierStateAsOSXFlags());
@@ -698,41 +710,29 @@ OSXKeyState::fakeKey(const Keystroke& keystroke)
             button, virtualKey, keyDown ? "down" : "up");
 
         // F19 is the dedicated macOS target for the Windows Right Alt tap.
-        // Select Gureum on the first F19 press, then let Gureum's own
-        // per-client composer handle subsequent Roman/Hangul toggles. Do not
-        // send F19 immediately after selecting han2: F19 is a toggle, and a
-        // correctly initialized han2 composer would toggle back to Roman.
+        // With VHID enabled, let Karabiner/Gureum receive the physical-style
+        // F19 event. The short wait keeps the first character from racing the
+        // input method's activation in web text fields.
         if (virtualKey == kVK_F19) {
-            if (keyDown && !repeat) {
-                TISInputSourceRef current = runOnMainThread([]() {
-                    return TISCopyCurrentKeyboardInputSource();
-                });
-                const std::string currentId = getInputSourceString(
-                    current, kTISPropertyInputSourceID);
-                const bool gureumActive =
-                    currentId.find("org.youknowone.inputmethod.Gureum") !=
-                    std::string::npos;
-                LOG_INFO("F19 received current=%s sourceGureum=%s",
-                         currentId.c_str(), gureumActive ? "yes" : "no");
-                if (current != nullptr) {
-                    CFRelease(current);
-                }
-                if (!gureumActive) {
-                    if (cycleInputSource(1)) {
-                        // TISSelectInputSource returns before the active app's
-                        // input session has finished switching. Waiting here
-                        // prevents the first character from racing activation.
-                        LOG_DEBUG1("selected Gureum han2; waiting for input session activation");
-                        LOG_INFO("F19 selected Gureum han2; F19 toggle not sent");
+#if defined(INPUTLEAP_USE_KARABINER_VHID)
+            if (m_karabinerVirtualKeyboard != nullptr &&
+                m_karabinerVirtualKeyboard->isReady()) {
+                if (!repeat) {
+                    postHIDVirtualKey(virtualKey, keyDown);
+                    if (keyDown) {
                         this_thread_sleep(0.075);
                     }
                 }
-                else {
-                    LOG_DEBUG1("passing F19 to active Gureum input method current=%s",
-                               currentId.c_str());
-                    LOG_INFO("F19 sent to Gureum input method");
-                    postHIDVirtualKey(kVK_F19, true);
-                    postHIDVirtualKey(kVK_F19, false);
+                break;
+            }
+#endif
+            if (keyDown && !repeat) {
+                if (cycleInputSource(1)) {
+                    // TISSelectInputSource returns before the active app's
+                    // input session has finished switching. Waiting here
+                    // prevents the first character from racing activation.
+                    LOG_INFO("F19 toggled macOS input source; waiting for activation");
+                    this_thread_sleep(0.075);
                 }
             }
             break;
