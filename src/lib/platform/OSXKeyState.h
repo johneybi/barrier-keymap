@@ -178,6 +178,9 @@ private:
     bool m_altPressed;
     bool m_superPressed;
     bool m_capsPressed;
+    // TISCopyCurrentKeyboardInputSource() is scoped to the client process,
+    // so keep track of the Gureum source selected for the remote target.
+    bool m_gureumInputSourceActive;
     void postUnicodeString(const std::u16string& str);
     void postBackspace(int count);
 };

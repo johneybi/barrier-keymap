@@ -200,6 +200,7 @@ OSXKeyState::init()
     m_altPressed = false;
     m_superPressed = false;
     m_capsPressed = false;
+    m_gureumInputSourceActive = false;
 
     // build virtual key map
     for (size_t i = 0; i < sizeof(s_controlKeys) / sizeof(s_controlKeys[0]);
@@ -694,9 +695,10 @@ OSXKeyState::fakeKey(const Keystroke& keystroke)
             button, virtualKey, keyDown ? "down" : "up");
 
         // F19 is the dedicated macOS target for the Windows Right Alt tap.
-        // Keep Gureum active and let its own per-client composer handle the
-        // Roman/Hangul toggle. This avoids trying to infer another app's IME
-        // state from the Input Leap client process.
+        // Select Gureum on the first F19 press, then let Gureum's own
+        // per-client composer handle subsequent Roman/Hangul toggles. Do not
+        // send F19 immediately after selecting han2: F19 is a toggle, and a
+        // correctly initialized han2 composer would toggle back to Roman.
         if (virtualKey == kVK_F19) {
             if (keyDown && !repeat) {
                 TISInputSourceRef current = runOnMainThread([]() {
@@ -710,24 +712,25 @@ OSXKeyState::fakeKey(const Keystroke& keystroke)
                 if (current != nullptr) {
                     CFRelease(current);
                 }
-                bool gureumSelected = false;
-                if (!gureumActive) {
-                    gureumSelected = cycleInputSource(1);
-                    if (gureumSelected) {
+                if (gureumActive) {
+                    m_gureumInputSourceActive = true;
+                }
+                if (!m_gureumInputSourceActive) {
+                    if (cycleInputSource(1)) {
+                        m_gureumInputSourceActive = true;
                         // TISSelectInputSource returns before the active app's
                         // input session has finished switching. Waiting here
-                        // prevents the following F19 event from racing that
-                        // activation. This path is only used when entering
-                        // Gureum; normal keys and mouse events are unaffected.
-                        LOG_DEBUG1("waiting for Gureum input session activation");
+                        // prevents the first character from racing activation.
+                        LOG_DEBUG1("selected Gureum han2; waiting for input session activation");
                         this_thread_sleep(0.075);
                     }
                 }
-                LOG_DEBUG1("passing F19 to active macOS input method current=%s gureum=%s",
-                           currentId.c_str(),
-                           (gureumActive || gureumSelected) ? "yes" : "no");
-                postHIDVirtualKey(kVK_F19, true);
-                postHIDVirtualKey(kVK_F19, false);
+                else {
+                    LOG_DEBUG1("passing F19 to active Gureum input method current=%s",
+                               currentId.c_str());
+                    postHIDVirtualKey(kVK_F19, true);
+                    postHIDVirtualKey(kVK_F19, false);
+                }
             }
             break;
         }
