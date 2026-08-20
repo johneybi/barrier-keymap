@@ -1067,11 +1067,39 @@ void OSXKeyState::cycleInputSource(std::int32_t offset)
         }
     }
 
-    const std::int32_t sourceCount =
-        static_cast<std::int32_t>(selectableSources.size());
-    const std::int32_t targetIndex =
-        ((currentIndex + offset) % sourceCount + sourceCount) % sourceCount;
-    TISInputSourceRef target = selectableSources[targetIndex];
+    // Gureum exposes more than one selectable input-source entry. Cycling the
+    // complete list can therefore land on Gureum's Roman mode in one direction
+    // and on its Hangul mode in the other. For the F19 toggle, prefer the two
+    // concrete sources the user actually wants and keep the generic fallback
+    // for other configurations.
+    TISInputSourceRef target = nullptr;
+    if (offset == 1) {
+        const std::string abcId = "com.apple.keylayout.ABC";
+        const std::string gureumHangulId =
+            "org.youknowone.inputmethod.Gureum.han2";
+        const std::string desiredId = currentId == gureumHangulId
+            ? abcId
+            : gureumHangulId;
+        for (TISInputSourceRef source : selectableSources) {
+            if (getInputSourceString(source, kTISPropertyInputSourceID) ==
+                desiredId) {
+                target = source;
+                break;
+            }
+        }
+        if (target != nullptr) {
+            LOG_DEBUG1("selecting deterministic macOS input source current=%s target=%s",
+                       currentId.c_str(), desiredId.c_str());
+        }
+    }
+
+    if (target == nullptr) {
+        const std::int32_t sourceCount =
+            static_cast<std::int32_t>(selectableSources.size());
+        const std::int32_t targetIndex =
+            ((currentIndex + offset) % sourceCount + sourceCount) % sourceCount;
+        target = selectableSources[targetIndex];
+    }
     const std::string targetId = getInputSourceString(
         target, kTISPropertyInputSourceID);
     const OSStatus status = runOnMainThread([&]() {
