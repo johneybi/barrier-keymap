@@ -92,7 +92,7 @@ OSXClipboard::synchronize()
 
 void OSXClipboard::add(EFormat format, const std::string& data)
 {
-    if (m_pboard == nullptr)
+    if (m_pboard == nullptr || data.empty())
         return;
 
     LOG_DEBUG("add %zd bytes to clipboard format: %d", data.size(), format);
@@ -113,19 +113,30 @@ void OSXClipboard::add(EFormat format, const std::string& data)
         // skip converters for other formats
         if (converter->getFormat() == format) {
             std::string osXData = converter->fromIClipboard(data);
+            if (osXData.empty()) {
+                continue;
+            }
             CFStringRef flavorType = converter->getOSXFormat();
             CFDataRef dataRef = CFDataCreate(kCFAllocatorDefault, (std::uint8_t *)osXData.data(),
                                              osXData.size());
+            if (dataRef == nullptr) {
+                continue;
+            }
             PasteboardItemID itemID = 0;
 
-            PasteboardPutItemFlavor(
+            OSStatus err = PasteboardPutItemFlavor(
                 m_pboard,
                 itemID,
                 flavorType,
                 dataRef,
                 kPasteboardFlavorNoFlags);
+            CFRelease(dataRef);
 
-            LOG_DEBUG("added %zd bytes to clipboard format: %d", data.size(), format);
+            if (err == noErr) {
+                LOG_DEBUG("added %zd bytes to clipboard format: %d", data.size(), format);
+            } else {
+                LOG_WARN("failed to put item flavor: %d", (int)err);
+            }
         }
 
     }

@@ -71,6 +71,7 @@ OSXScreen::OSXScreen(IEventQueue* events, bool isPrimary, bool autoShowHideCurso
 	m_isPrimary(isPrimary),
 	m_isOnScreen(m_isPrimary),
 	assertionID(0),
+	m_idleSleepAssertionID(kIOPMNullAssertionID),
 	m_displayID(kCGNullDirectDisplay),
 	m_x(0),
 	m_y(0),
@@ -720,6 +721,18 @@ OSXScreen::hideCursor()
 void
 OSXScreen::enable()
 {
+	if (!m_isPrimary && m_idleSleepAssertionID == kIOPMNullAssertionID) {
+		const IOReturn result = IOPMAssertionCreateWithName(
+			kIOPMAssertionTypePreventUserIdleSystemSleep,
+			kIOPMAssertionLevelOn,
+			CFSTR("Input Leap client is connected"),
+			&m_idleSleepAssertionID);
+		if (result != kIOReturnSuccess) {
+			LOG_WARN("failed to prevent idle system sleep, error=%d", result);
+			m_idleSleepAssertionID = kIOPMNullAssertionID;
+		}
+	}
+
 	// watch the clipboard
     m_clipboardTimer = m_events->newTimer(1.0, nullptr);
 	m_events->add_handler(EventType::TIMER, m_clipboardTimer,
@@ -768,6 +781,11 @@ OSXScreen::enable()
 void
 OSXScreen::disable()
 {
+	if (m_idleSleepAssertionID != kIOPMNullAssertionID) {
+		IOPMAssertionRelease(m_idleSleepAssertionID);
+		m_idleSleepAssertionID = kIOPMNullAssertionID;
+	}
+
 	if (m_autoShowHideCursor) {
 		showCursor();
 	}
@@ -886,7 +904,15 @@ OSXScreen::setClipboard(ClipboardID, const IClipboard* src)
 {
     if (src != nullptr) {
 		LOG_DEBUG("setting clipboard");
-		Clipboard::copy(&m_pasteboard, src);
+		try {
+			Clipboard::copy(&m_pasteboard, src);
+		}
+		catch (const std::exception& e) {
+			LOG_WARN("failed to copy clipboard: %s", e.what());
+		}
+		catch (...) {
+			LOG_WARN("unknown error while copying clipboard");
+		}
 	}
 	return true;
 }
@@ -1050,7 +1076,7 @@ OSXScreen::onMouseMove(CGFloat mx, CGFloat my)
 	CGFloat x = mx - m_xCursor;
 	CGFloat y = my - m_yCursor;
 
-	if ((x == 0 && y == 0) || (mx == m_xCenter && mx == m_yCenter)) {
+	if ((x == 0 && y == 0) || (mx == m_xCenter && my == m_yCenter)) {
 		return true;
 	}
 
@@ -1622,7 +1648,12 @@ void OSXScreen::watchSystemPowerThread()
 	LOG_DEBUG("started watchSystemPowerThread");
 
 	LOG_DEBUG("waiting for event loop");
-	m_events->waitForReady();
+	try {
+		m_events->waitForReady();
+	}
+	catch (const std::exception& e) {
+		LOG_WARN("watchSystemPowerThread waitForReady exception: %s", e.what());
+	}
 
 #if defined(MAC_OS_X_VERSION_10_7)
     {

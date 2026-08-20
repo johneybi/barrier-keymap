@@ -311,3 +311,42 @@ browser keyboard keys rather than `XBUTTON1`/`XBUTTON2`; send the surrounding
 Windows DEBUG1 key log to the Windows owner. If the lines are present, capture
 the corresponding macOS client receive/fake-mouse-button log to distinguish
 network forwarding from Quartz event injection.
+
+## 2026-08-15 macOS application IME boundary
+
+The installed macOS client had been stale: its embedded `input-leapc` reported
+`git-2026-08-13-c3d9d510`, although the source tree had already reverted the
+Quartz experiment. That binary mixed IOHID modifier events with Quartz ordinary
+key events, which is not an acceptable Korean IME baseline.
+
+The application was rebuilt and its embedded client replaced with
+`git-2026-08-15-62ef47b8`. This version sends both modifiers and ordinary keys
+through the original `IOHIDPostEvent` path. It connects to the Windows server
+normally, and Korean 2-Set composition is confirmed working in Chrome's
+address bar and YouTube search field.
+
+Safari still receives the same remote keystrokes as decomposed Hangul jamo.
+Because Chrome and Safari differ while the Windows remap, protocol packets, and
+macOS input-source state are identical, treat this as an application-specific
+limitation of direct IOHID event injection. Do not change the shared remapper
+or reintroduce mixed Quartz/IOHID delivery to target Safari: that would discard
+the working Chrome baseline. A universal Safari-compatible solution requires a
+separate virtual HID input device, which is a signed/entitled macOS product
+workstream rather than a server remap change.
+
+## 2026-08-20 Gureum per-client mode toggle
+
+Selecting `org.youknowone.inputmethod.Gureum.han2` is not sufficient for every
+browser text client because Gureum can retain a Roman/Hangul composer state per
+client. The macOS client now keeps Gureum active and sends F19 as a normal key
+to Gureum's own per-client mode toggle. On this Mac, that command is configured
+as:
+
+```text
+defaults write org.youknowone.Gureum InputModeExchangeKey \\
+  -dict modifier -int 0 keyCode -int 80
+```
+
+The F19 handler consumes the command in Gureum, so it does not appear as text in
+the browser. The previous source-switch and synthetic Right Option workarounds
+were removed because they tried to infer or mutate another app's IME state.

@@ -42,6 +42,24 @@ static const struct
 
 const int serverDefaultIndex = 7;
 
+static bool isLegacyMacInputToggle(const ServerConfig::KeyRemap& remap)
+{
+    const QString source = remap.source.trimmed().toLower();
+    const QString output = remap.output.trimmed().toLower();
+
+    if (source != QStringLiteral("right_alt") &&
+        source != QStringLiteral("hangul")) {
+        return false;
+    }
+
+    return output == QStringLiteral("f16") ||
+           output == QStringLiteral("next_group") ||
+           output == QStringLiteral("\\uee08") ||
+           output == QString(QChar(0xee08)) ||
+           output == QStringLiteral("control+space") ||
+           output == QStringLiteral("ctrl+space");
+}
+
 ServerConfig::ServerConfig(QSettings* settings, int numColumns, int numRows ,
                 QString serverName, MainWindow* mainWindow) :
     m_pSettings(settings),
@@ -189,6 +207,9 @@ void ServerConfig::loadSettings()
         remap.source = settings().value("source").toString();
         remap.output = settings().value("output").toString();
         remap.holdOutput = settings().value("holdOutput").toString();
+        if (isLegacyMacInputToggle(remap)) {
+            remap.output = QStringLiteral("F19");
+        }
         m_KeyRemaps.append(remap);
     }
     settings().endArray();

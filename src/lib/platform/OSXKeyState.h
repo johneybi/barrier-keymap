@@ -123,7 +123,7 @@ private:
     void setGroup(std::int32_t group);
 
     // Cycle through enabled, selectable macOS input sources.
-    void cycleInputSource(std::int32_t offset);
+    bool cycleInputSource(std::int32_t offset);
 
     // Check if the keyboard layout has changed and update keyboard state
     // if so.
@@ -178,6 +178,11 @@ private:
     bool m_altPressed;
     bool m_superPressed;
     bool m_capsPressed;
+    // TISCopyCurrentKeyboardInputSource() is scoped to the client process,
+    // so keep track of the Gureum source selected for the remote target.
+    bool m_gureumInputSourceActive;
+    void postUnicodeString(const std::u16string& str);
+    void postBackspace(int count);
 };
 
 } // namespace inputleap

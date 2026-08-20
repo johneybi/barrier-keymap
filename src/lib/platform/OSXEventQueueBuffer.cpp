@@ -20,6 +20,7 @@
 
 #include "base/Event.h"
 #include "base/IEventQueue.h"
+#include "base/Log.h"
 
 #include <algorithm>
 
@@ -83,8 +84,13 @@ IEventQueueBuffer::Type OSXEventQueueBuffer::getEvent(Event& event, std::uint32_
 
     // handle the event
     if (error == eventLoopQuitErr) {
-        event = Event(EventType::QUIT);
-        return kSystem;
+        // Current macOS releases can report a transient Carbon quit result
+        // while the Cocoa application remains active. Treating it as a real
+        // quit tears down the client, and the GUI immediately starts another
+        // copy. The application is terminated explicitly by its signal or
+        // IPC paths, so it is safe to continue waiting here.
+        LOG_WARN("ignoring transient Carbon event-loop quit result");
+        return kNone;
     }
     else if (error != noErr) {
         return kNone;
@@ -110,37 +116,17 @@ IEventQueueBuffer::Type OSXEventQueueBuffer::getEvent(Event& event, std::uint32_
 
 bool OSXEventQueueBuffer::addEvent(std::uint32_t dataID)
 {
-    EventRef event;
-    OSStatus error = CreateEvent(
-                            kCFAllocatorDefault,
-                            'Syne',
-                            dataID,
-                            0,
-                            kEventAttributeNone,
-                            &event);
-
-    if (error == noErr) {
-        {
-            std::lock_guard<std::mutex> lock(m_userEventMutex);
-            m_userEvents.push_back(dataID);
-        }
-
-        assert(m_carbonEventQueue != nullptr);
-
-        error = PostEventToQueue(
-            m_carbonEventQueue,
-            event,
-            kEventPriorityStandard);
-
-        ReleaseEvent(event);
-
-        if (error != noErr && !removeUserEvent(dataID)) {
-            // Another wake-up delivered the queued event concurrently.
-            error = noErr;
-        }
+    {
+        std::lock_guard<std::mutex> lock(m_userEventMutex);
+        m_userEvents.push_back(dataID);
     }
 
-    return (error == noErr);
+    // Posting a Carbon event from the socket thread is not safe on recent
+    // macOS releases: the native event queue may disappear while the client
+    // is reconnecting, causing PostEventToQueue to dereference invalid state.
+    // waitForEvent polls this FIFO at most every 4 ms, so no native wake-up is
+    // needed to keep input responsive.
+    return true;
 }
 
 bool

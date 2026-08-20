@@ -21,9 +21,11 @@
 #include "platform/OSXMediaKeySupport.h"
 #include "arch/Arch.h"
 #include "base/Log.h"
+#include "base/Time.h"
 
 #include <Carbon/Carbon.h>
 #include <CoreServices/CoreServices.h>
+#include <dispatch/dispatch.h>
 #include <IOKit/hidsystem/IOHIDLib.h>
 
 namespace inputleap {
@@ -38,14 +40,39 @@ static const std::uint32_t s_osxNumLock = 1 << 16;
 static const std::uint32_t s_int4VK = 0x8a; // international4
 static const std::uint32_t s_int5VK = 0x8b; // international5
 
+template <typename Func>
+static auto runOnMainThread(Func&& func) -> decltype(func())
+{
+    if (pthread_main_np()) {
+        return func();
+    }
+    __block decltype(func()) result;
+    dispatch_sync(dispatch_get_main_queue(), ^{
+        result = func();
+    });
+    return result;
+}
+
+static void runOnMainThreadVoid(std::function<void()> func)
+{
+    if (pthread_main_np()) {
+        func();
+        return;
+    }
+    dispatch_sync(dispatch_get_main_queue(), ^{
+        func();
+    });
+}
+
 static std::string getInputSourceString(TISInputSourceRef source, CFStringRef property)
 {
     if (source == nullptr) {
         return "<none>";
     }
 
-    CFStringRef value = static_cast<CFStringRef>(
-        TISGetInputSourceProperty(source, property));
+    CFStringRef value = runOnMainThread([&]() {
+        return static_cast<CFStringRef>(TISGetInputSourceProperty(source, property));
+    });
     if (value == nullptr) {
         return "<unknown>";
     }
@@ -93,6 +120,10 @@ static const KeyEntry    s_controlKeys[] = {
     { kKeyF14,        kVK_F14 },
     { kKeyF15,        kVK_F15 },
     { kKeyF16,        kVK_F16 },
+    { kKeyF17,        kVK_F17 },
+    { kKeyF18,        kVK_F18 },
+    { kKeyF19,        kVK_F19 },
+    { kKeyF20,        kVK_F20 },
 
     { kKeyKP_0,        kVK_ANSI_Keypad0 },
     { kKeyKP_1,        kVK_ANSI_Keypad1 },
@@ -173,6 +204,7 @@ OSXKeyState::init()
     m_altPressed = false;
     m_superPressed = false;
     m_capsPressed = false;
+    m_gureumInputSourceActive = false;
 
     // build virtual key map
     for (size_t i = 0; i < sizeof(s_controlKeys) / sizeof(s_controlKeys[0]);
@@ -269,7 +301,9 @@ OSXKeyState::mapKeyFromEvent(KeyIDs& ids,
     }
 
     // get keyboard info
-    TISInputSourceRef currentKeyboardLayout = TISCopyCurrentKeyboardLayoutInputSource();
+    TISInputSourceRef currentKeyboardLayout = runOnMainThread([]() {
+        return TISCopyCurrentKeyboardLayoutInputSource();
+    });
 
     if (currentKeyboardLayout == nullptr) {
         return kKeyNone;
@@ -304,8 +338,9 @@ OSXKeyState::mapKeyFromEvent(KeyIDs& ids,
     }
 
     // translate via uchr resource
-    CFDataRef ref = (CFDataRef) TISGetInputSourceProperty(currentKeyboardLayout,
-                                kTISPropertyUnicodeKeyLayoutData);
+    CFDataRef ref = runOnMainThread([&]() {
+        return (CFDataRef)TISGetInputSourceProperty(currentKeyboardLayout, kTISPropertyUnicodeKeyLayoutData);
+    });
     const UCKeyboardLayout* layout = (const UCKeyboardLayout*) CFDataGetBytePtr(ref);
     const bool layoutValid = (layout != nullptr);
 
@@ -412,7 +447,9 @@ OSXKeyState::pollActiveModifiers() const
 
 std::int32_t OSXKeyState::pollActiveGroup() const
 {
-    TISInputSourceRef inputSource = TISCopyCurrentKeyboardLayoutInputSource();
+    TISInputSourceRef inputSource = runOnMainThread([]() {
+        return TISCopyCurrentKeyboardLayoutInputSource();
+    });
     const std::string id = getInputSourceString(
         inputSource, kTISPropertyInputSourceID);
 
@@ -424,8 +461,8 @@ std::int32_t OSXKeyState::pollActiveGroup() const
         return i->second;
     }
 
-    LOG_DEBUG("can't map active macOS keyboard layout id=%s, use first group",
-              id.c_str());
+    LOG_DEBUG1("can't map active macOS keyboard layout id=%s, use first group",
+               id.c_str());
     if (inputSource != nullptr) {
         CFRelease(inputSource);
     }
@@ -476,8 +513,9 @@ OSXKeyState::getKeyMap(inputleap::KeyMap& keyMap)
 
         // add regular keys
         // try uchr resource first
-        CFDataRef resourceRef = (CFDataRef)TISGetInputSourceProperty(
-            m_groups[g], kTISPropertyUnicodeKeyLayoutData);
+        CFDataRef resourceRef = runOnMainThread([&]() {
+            return (CFDataRef)TISGetInputSourceProperty(m_groups[g], kTISPropertyUnicodeKeyLayoutData);
+        });
 
         layoutValid = resourceRef != nullptr;
         if (layoutValid)
@@ -525,92 +563,123 @@ static io_connect_t getEventDriver(void)
     return sEventDrvrRef;
 }
 
+static std::uint16_t mapVirtualKeyToCharCode(std::uint8_t vk, bool shift)
+{
+    switch (vk) {
+    case kVK_ANSI_A: return shift ? 'A' : 'a';
+    case kVK_ANSI_B: return shift ? 'B' : 'b';
+    case kVK_ANSI_C: return shift ? 'C' : 'c';
+    case kVK_ANSI_D: return shift ? 'D' : 'd';
+    case kVK_ANSI_E: return shift ? 'E' : 'e';
+    case kVK_ANSI_F: return shift ? 'F' : 'f';
+    case kVK_ANSI_G: return shift ? 'G' : 'g';
+    case kVK_ANSI_H: return shift ? 'H' : 'h';
+    case kVK_ANSI_I: return shift ? 'I' : 'i';
+    case kVK_ANSI_J: return shift ? 'J' : 'j';
+    case kVK_ANSI_K: return shift ? 'K' : 'k';
+    case kVK_ANSI_L: return shift ? 'L' : 'l';
+    case kVK_ANSI_M: return shift ? 'M' : 'm';
+    case kVK_ANSI_N: return shift ? 'N' : 'n';
+    case kVK_ANSI_O: return shift ? 'O' : 'o';
+    case kVK_ANSI_P: return shift ? 'P' : 'p';
+    case kVK_ANSI_Q: return shift ? 'Q' : 'q';
+    case kVK_ANSI_R: return shift ? 'R' : 'r';
+    case kVK_ANSI_S: return shift ? 'S' : 's';
+    case kVK_ANSI_T: return shift ? 'T' : 't';
+    case kVK_ANSI_U: return shift ? 'U' : 'u';
+    case kVK_ANSI_V: return shift ? 'V' : 'v';
+    case kVK_ANSI_W: return shift ? 'W' : 'w';
+    case kVK_ANSI_X: return shift ? 'X' : 'x';
+    case kVK_ANSI_Y: return shift ? 'Y' : 'y';
+    case kVK_ANSI_Z: return shift ? 'Z' : 'z';
+
+    case kVK_ANSI_1: return shift ? '!' : '1';
+    case kVK_ANSI_2: return shift ? '@' : '2';
+    case kVK_ANSI_3: return shift ? '#' : '3';
+    case kVK_ANSI_4: return shift ? '$' : '4';
+    case kVK_ANSI_5: return shift ? '%' : '5';
+    case kVK_ANSI_6: return shift ? '^' : '6';
+    case kVK_ANSI_7: return shift ? '&' : '7';
+    case kVK_ANSI_8: return shift ? '*' : '8';
+    case kVK_ANSI_9: return shift ? '(' : '9';
+    case kVK_ANSI_0: return shift ? ')' : '0';
+
+    case kVK_ANSI_Equal: return shift ? '+' : '=';
+    case kVK_ANSI_Minus: return shift ? '_' : '-';
+    case kVK_ANSI_RightBracket: return shift ? '}' : ']';
+    case kVK_ANSI_LeftBracket: return shift ? '{' : '[';
+    case kVK_ANSI_Quote: return shift ? '"' : '\'';
+    case kVK_ANSI_Semicolon: return shift ? ':' : ';';
+    case kVK_ANSI_Backslash: return shift ? '|' : '\\';
+    case kVK_ANSI_Comma: return shift ? '<' : ',';
+    case kVK_ANSI_Slash: return shift ? '?' : '/';
+    case kVK_ANSI_Period: return shift ? '>' : '.';
+    case kVK_ANSI_Grave: return shift ? '~' : '`';
+    case kVK_Space: return ' ';
+    case kVK_Return: return '\r';
+    case kVK_Tab: return '\t';
+    case kVK_Delete: return '\b';
+    default: return 0;
+    }
+}
+
 void OSXKeyState::postHIDVirtualKey(const std::uint8_t virtualKeyCode, const bool postDown)
 {
-    static std::uint32_t modifiers = 0;
-
-    NXEventData event;
-    IOGPoint loc = { 0, 0 };
-    std::uint32_t modifiersDelta = 0;
-
-    bzero(&event, sizeof(NXEventData));
-
     switch (virtualKeyCode)
     {
     case kVK_Shift:
     case kVK_RightShift:
+        m_shiftPressed = postDown;
+        break;
     case kVK_Command:
     case kVK_RightCommand:
+        m_superPressed = postDown;
+        break;
     case kVK_Option:
     case kVK_RightOption:
+        m_altPressed = postDown;
+        break;
     case kVK_Control:
     case kVK_RightControl:
+        m_controlPressed = postDown;
+        break;
     case kVK_CapsLock:
-        switch (virtualKeyCode)
-        {
-        case kVK_Shift:
-                modifiersDelta = NX_SHIFTMASK | NX_DEVICELSHIFTKEYMASK;
-                m_shiftPressed = postDown;
-                break;
-        case kVK_RightShift:
-                modifiersDelta = NX_SHIFTMASK | NX_DEVICERSHIFTKEYMASK;
-                m_shiftPressed = postDown;
-                break;
-        case kVK_Command:
-                modifiersDelta = NX_COMMANDMASK | NX_DEVICELCMDKEYMASK;
-                m_superPressed = postDown;
-                break;
-        case kVK_RightCommand:
-                modifiersDelta = NX_COMMANDMASK | NX_DEVICERCMDKEYMASK;
-                m_superPressed = postDown;
-                break;
-        case kVK_Option:
-                modifiersDelta = NX_ALTERNATEMASK | NX_DEVICELALTKEYMASK;
-                m_altPressed = postDown;
-                break;
-        case kVK_RightOption:
-                modifiersDelta = NX_ALTERNATEMASK | NX_DEVICERALTKEYMASK;
-                m_altPressed = postDown;
-                break;
-        case kVK_Control:
-                modifiersDelta = NX_CONTROLMASK | NX_DEVICELCTLKEYMASK;
-                m_controlPressed = postDown;
-                break;
-        case kVK_RightControl:
-                modifiersDelta = NX_CONTROLMASK | NX_DEVICERCTLKEYMASK;
-                m_controlPressed = postDown;
-                break;
-        case kVK_CapsLock:
-                modifiersDelta = NX_ALPHASHIFTMASK;
-                m_capsPressed = postDown;
-                break;
-        }
-
-        // update the modifier bit
-        if (postDown) {
-            modifiers |= modifiersDelta;
-        }
-        else {
-            modifiers &= ~modifiersDelta;
-        }
-
-        kern_return_t kr;
-        event.key.keyCode = virtualKeyCode;
-        kr = IOHIDPostEvent(getEventDriver(), NX_FLAGSCHANGED, loc,
-                &event, kNXEventDataVersion, modifiers, true);
-        assert(KERN_SUCCESS == kr);
+        m_capsPressed = postDown;
         break;
+    }
 
-    default:
-        event.key.repeat = false;
-        event.key.keyCode = virtualKeyCode;
-        event.key.origCharSet = event.key.charSet = NX_ASCIISET;
-        event.key.origCharCode = event.key.charCode = 0;
-        kr = IOHIDPostEvent(getEventDriver(),
-                postDown ? NX_KEYDOWN : NX_KEYUP,
-                loc, &event, kNXEventDataVersion, 0, false);
-        assert(KERN_SUCCESS == kr);
-        break;
+    CGEventRef quartzEvent = CGEventCreateKeyboardEvent(nullptr, virtualKeyCode, postDown);
+    if (quartzEvent != nullptr) {
+        CGEventSetFlags(quartzEvent, getModifierStateAsOSXFlags());
+        CGEventPost(kCGHIDEventTap, quartzEvent);
+        CFRelease(quartzEvent);
+    }
+}
+
+void OSXKeyState::postBackspace(int count)
+{
+    for (int i = 0; i < count; ++i) {
+        postHIDVirtualKey(kVK_Delete, true);
+        postHIDVirtualKey(kVK_Delete, false);
+    }
+}
+
+void OSXKeyState::postUnicodeString(const std::u16string& str)
+{
+    for (char16_t ch : str) {
+        UniChar u = static_cast<UniChar>(ch);
+        CGEventRef down = CGEventCreateKeyboardEvent(nullptr, 0, true);
+        if (down != nullptr) {
+            CGEventKeyboardSetUnicodeString(down, 1, &u);
+            CGEventPost(kCGHIDEventTap, down);
+            CFRelease(down);
+        }
+        CGEventRef up = CGEventCreateKeyboardEvent(nullptr, 0, false);
+        if (up != nullptr) {
+            CGEventKeyboardSetUnicodeString(up, 1, &u);
+            CGEventPost(kCGHIDEventTap, up);
+            CFRelease(up);
+        }
     }
 }
 
@@ -622,11 +691,59 @@ OSXKeyState::fakeKey(const Keystroke& keystroke)
 
         KeyButton button = keystroke.m_data.m_button.m_button;
         bool keyDown = keystroke.m_data.m_button.m_press;
+        bool repeat = keystroke.m_data.m_button.m_repeat;
         CGKeyCode virtualKey = mapKeyButtonToVirtualKey(button);
 
         LOG_DEBUG1(
             "  button=0x%04x virtualKey=0x%04x keyDown=%s",
             button, virtualKey, keyDown ? "down" : "up");
+
+        // F19 is the dedicated macOS target for the Windows Right Alt tap.
+        // Select Gureum on the first F19 press, then let Gureum's own
+        // per-client composer handle subsequent Roman/Hangul toggles. Do not
+        // send F19 immediately after selecting han2: F19 is a toggle, and a
+        // correctly initialized han2 composer would toggle back to Roman.
+        if (virtualKey == kVK_F19) {
+            if (keyDown && !repeat) {
+                TISInputSourceRef current = runOnMainThread([]() {
+                    return TISCopyCurrentKeyboardInputSource();
+                });
+                const std::string currentId = getInputSourceString(
+                    current, kTISPropertyInputSourceID);
+                const bool gureumActive =
+                    currentId.find("org.youknowone.inputmethod.Gureum") !=
+                    std::string::npos;
+                LOG_INFO("F19 received current=%s trackedGureum=%s sourceGureum=%s",
+                         currentId.c_str(),
+                         m_gureumInputSourceActive ? "yes" : "no",
+                         gureumActive ? "yes" : "no");
+                if (current != nullptr) {
+                    CFRelease(current);
+                }
+                if (gureumActive) {
+                    m_gureumInputSourceActive = true;
+                }
+                if (!m_gureumInputSourceActive) {
+                    if (cycleInputSource(1)) {
+                        m_gureumInputSourceActive = true;
+                        // TISSelectInputSource returns before the active app's
+                        // input session has finished switching. Waiting here
+                        // prevents the first character from racing activation.
+                        LOG_DEBUG1("selected Gureum han2; waiting for input session activation");
+                        LOG_INFO("F19 selected Gureum han2; F19 toggle not sent");
+                        this_thread_sleep(0.075);
+                    }
+                }
+                else {
+                    LOG_DEBUG1("passing F19 to active Gureum input method current=%s",
+                               currentId.c_str());
+                    LOG_INFO("F19 sent to Gureum input method");
+                    postHIDVirtualKey(kVK_F19, true);
+                    postHIDVirtualKey(kVK_F19, false);
+                }
+            }
+            break;
+        }
 
         postHIDVirtualKey(virtualKey, keyDown);
 
@@ -880,7 +997,9 @@ OSXKeyState::getGroups(GroupList& groups) const
     CFStringRef keys[] = { kTISPropertyInputSourceCategory };
     CFStringRef values[] = { kTISCategoryKeyboardInputSource };
     CFDictionaryRef dict = CFDictionaryCreate(nullptr, (const void **)keys, (const void **)values, 1, nullptr, nullptr);
-    CFArrayRef kbds = TISCreateInputSourceList(dict, false);
+    CFArrayRef kbds = runOnMainThread([&]() {
+        return TISCreateInputSourceList(dict, false);
+    });
     n = CFArrayGetCount(kbds);
     gotLayouts = (n != 0);
 
@@ -895,8 +1014,9 @@ OSXKeyState::getGroups(GroupList& groups) const
         TISInputSourceRef keyboardLayout =
             (TISInputSourceRef)CFArrayGetValueAtIndex(kbds, i);
 
-        const bool hasKeyLayout = TISGetInputSourceProperty(
-            keyboardLayout, kTISPropertyUnicodeKeyLayoutData) != nullptr;
+        const bool hasKeyLayout = runOnMainThread([&]() {
+            return TISGetInputSourceProperty(keyboardLayout, kTISPropertyUnicodeKeyLayoutData) != nullptr;
+        });
         LOG_DEBUG1("macOS keyboard layout candidate id=%s name=%s keymap=%s",
                    getInputSourceString(
                        keyboardLayout, kTISPropertyInputSourceID).c_str(),
@@ -922,20 +1042,28 @@ void OSXKeyState::setGroup(std::int32_t group)
     TISInputSourceRef target = m_groups[group];
     const std::string targetId = getInputSourceString(
         target, kTISPropertyInputSourceID);
-    TISSetInputMethodKeyboardLayoutOverride(target);
+    runOnMainThreadVoid([&]() {
+        TISSetInputMethodKeyboardLayoutOverride(target);
+    });
 
     LOG_DEBUG1("set macOS keyboard layout group=%d target=%s",
                group, targetId.c_str());
 }
 
-void OSXKeyState::cycleInputSource(std::int32_t offset)
+bool OSXKeyState::cycleInputSource(std::int32_t offset)
 {
+    const std::string abcId = "com.apple.keylayout.ABC";
+    const std::string gureumHangulId =
+        "org.youknowone.inputmethod.Gureum.han2";
+
     CFStringRef keys[] = { kTISPropertyInputSourceCategory };
     CFStringRef values[] = { kTISCategoryKeyboardInputSource };
     CFDictionaryRef filter = CFDictionaryCreate(
         nullptr, reinterpret_cast<const void **>(keys),
         reinterpret_cast<const void **>(values), 1, nullptr, nullptr);
-    CFArrayRef sources = TISCreateInputSourceList(filter, false);
+    CFArrayRef sources = runOnMainThread([&]() {
+        return TISCreateInputSourceList(filter, false);
+    });
     CFRelease(filter);
 
     std::vector<TISInputSourceRef> selectableSources;
@@ -943,21 +1071,37 @@ void OSXKeyState::cycleInputSource(std::int32_t offset)
     for (CFIndex i = 0; i < count; ++i) {
         TISInputSourceRef source = static_cast<TISInputSourceRef>(
             const_cast<void *>(CFArrayGetValueAtIndex(sources, i)));
-        CFBooleanRef selectCapable = static_cast<CFBooleanRef>(
-            TISGetInputSourceProperty(
-                source, kTISPropertyInputSourceIsSelectCapable));
-        if (selectCapable == kCFBooleanTrue) {
+        const auto sourceFlags = runOnMainThread([&]() {
+            const CFBooleanRef selectCapable = static_cast<CFBooleanRef>(
+                TISGetInputSourceProperty(
+                    source, kTISPropertyInputSourceIsSelectCapable));
+            const CFBooleanRef enabled = static_cast<CFBooleanRef>(
+                TISGetInputSourceProperty(
+                    source, kTISPropertyInputSourceIsEnabled));
+            return std::make_pair(
+                selectCapable == kCFBooleanTrue,
+                enabled == kCFBooleanTrue);
+        });
+        if (sourceFlags.first && sourceFlags.second) {
             selectableSources.push_back(source);
         }
+
+        LOG_DEBUG1("macOS input source candidate id=%s selectable=%s enabled=%s",
+                   getInputSourceString(
+                       source, kTISPropertyInputSourceID).c_str(),
+                   sourceFlags.first ? "yes" : "no",
+                   sourceFlags.second ? "yes" : "no");
     }
 
     if (selectableSources.empty()) {
         LOG_WARN("no selectable macOS input sources");
         CFRelease(sources);
-        return;
+        return false;
     }
 
-    TISInputSourceRef current = TISCopyCurrentKeyboardInputSource();
+    TISInputSourceRef current = runOnMainThread([]() {
+        return TISCopyCurrentKeyboardInputSource();
+    });
     const std::string currentId = getInputSourceString(
         current, kTISPropertyInputSourceID);
     std::int32_t currentIndex = 0;
@@ -970,14 +1114,41 @@ void OSXKeyState::cycleInputSource(std::int32_t offset)
         }
     }
 
-    const std::int32_t sourceCount =
-        static_cast<std::int32_t>(selectableSources.size());
-    const std::int32_t targetIndex =
-        ((currentIndex + offset) % sourceCount + sourceCount) % sourceCount;
-    TISInputSourceRef target = selectableSources[targetIndex];
+    // Gureum exposes more than one selectable input-source entry. Cycling the
+    // complete list can therefore land on Gureum's Roman mode in one direction
+    // and on its Hangul mode in the other. For the F19 toggle, prefer the two
+    // concrete sources the user actually wants and keep the generic fallback
+    // for other configurations.
+    TISInputSourceRef target = nullptr;
+    if (offset == 1) {
+        const std::string desiredId = currentId == gureumHangulId
+            ? abcId
+            : gureumHangulId;
+        for (TISInputSourceRef source : selectableSources) {
+            if (getInputSourceString(source, kTISPropertyInputSourceID) ==
+                desiredId) {
+                target = source;
+                break;
+            }
+        }
+        if (target != nullptr) {
+            LOG_DEBUG1("selecting deterministic macOS input source current=%s target=%s",
+                       currentId.c_str(), desiredId.c_str());
+        }
+    }
+
+    if (target == nullptr) {
+        const std::int32_t sourceCount =
+            static_cast<std::int32_t>(selectableSources.size());
+        const std::int32_t targetIndex =
+            ((currentIndex + offset) % sourceCount + sourceCount) % sourceCount;
+        target = selectableSources[targetIndex];
+    }
     const std::string targetId = getInputSourceString(
         target, kTISPropertyInputSourceID);
-    const OSStatus status = TISSelectInputSource(target);
+    const OSStatus status = runOnMainThread([&]() {
+        return TISSelectInputSource(target);
+    });
 
     LOG_DEBUG1("cycle macOS input source offset=%+d current=%s target=%s status=%d",
                offset, currentId.c_str(), targetId.c_str(),
@@ -987,6 +1158,8 @@ void OSXKeyState::cycleInputSource(std::int32_t offset)
         CFRelease(current);
     }
     CFRelease(sources);
+
+    return status == noErr && targetId == gureumHangulId;
 }
 
 void

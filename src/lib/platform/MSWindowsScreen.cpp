@@ -1625,6 +1625,9 @@ MSWindowsScreen::mapButtonFromEvent(WPARAM msg, LPARAM button) const
         // mouseData. The low word is reserved and must not be compared.
         switch (HIWORD(static_cast<DWORD>(button))) {
         case XBUTTON1:
+            // WM_XBUTTON proves the device supplied an auxiliary button.
+            // Some drivers still report only three buttons through
+            // SM_CMOUSEBUTTONS, so do not discard the event based on it.
             return kButtonExtra0;
 
         case XBUTTON2:
