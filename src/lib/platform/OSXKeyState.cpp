@@ -21,6 +21,7 @@
 #include "platform/OSXMediaKeySupport.h"
 #include "arch/Arch.h"
 #include "base/Log.h"
+#include "base/Time.h"
 
 #include <Carbon/Carbon.h>
 #include <CoreServices/CoreServices.h>
@@ -709,11 +710,22 @@ OSXKeyState::fakeKey(const Keystroke& keystroke)
                 if (current != nullptr) {
                     CFRelease(current);
                 }
+                bool gureumSelected = false;
                 if (!gureumActive) {
-                    cycleInputSource(1);
+                    gureumSelected = cycleInputSource(1);
+                    if (gureumSelected) {
+                        // TISSelectInputSource returns before the active app's
+                        // input session has finished switching. Waiting here
+                        // prevents the following F19 event from racing that
+                        // activation. This path is only used when entering
+                        // Gureum; normal keys and mouse events are unaffected.
+                        LOG_DEBUG1("waiting for Gureum input session activation");
+                        this_thread_sleep(0.075);
+                    }
                 }
                 LOG_DEBUG1("passing F19 to active macOS input method current=%s gureum=%s",
-                           currentId.c_str(), gureumActive ? "yes" : "no");
+                           currentId.c_str(),
+                           (gureumActive || gureumSelected) ? "yes" : "no");
                 postHIDVirtualKey(kVK_F19, true);
                 postHIDVirtualKey(kVK_F19, false);
             }
@@ -1025,7 +1037,7 @@ void OSXKeyState::setGroup(std::int32_t group)
                group, targetId.c_str());
 }
 
-void OSXKeyState::cycleInputSource(std::int32_t offset)
+bool OSXKeyState::cycleInputSource(std::int32_t offset)
 {
     const std::string abcId = "com.apple.keylayout.ABC";
     const std::string gureumHangulId =
@@ -1071,7 +1083,7 @@ void OSXKeyState::cycleInputSource(std::int32_t offset)
     if (selectableSources.empty()) {
         LOG_WARN("no selectable macOS input sources");
         CFRelease(sources);
-        return;
+        return false;
     }
 
     TISInputSourceRef current = runOnMainThread([]() {
@@ -1133,6 +1145,8 @@ void OSXKeyState::cycleInputSource(std::int32_t offset)
         CFRelease(current);
     }
     CFRelease(sources);
+
+    return status == noErr && targetId == gureumHangulId;
 }
 
 void

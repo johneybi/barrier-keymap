@@ -123,7 +123,7 @@ private:
     void setGroup(std::int32_t group);
 
     // Cycle through enabled, selectable macOS input sources.
-    void cycleInputSource(std::int32_t offset);
+    bool cycleInputSource(std::int32_t offset);
 
     // Check if the keyboard layout has changed and update keyboard state
     // if so.
