@@ -1013,12 +1013,26 @@ void OSXKeyState::cycleInputSource(std::int32_t offset)
     for (CFIndex i = 0; i < count; ++i) {
         TISInputSourceRef source = static_cast<TISInputSourceRef>(
             const_cast<void *>(CFArrayGetValueAtIndex(sources, i)));
-        CFBooleanRef selectCapable = runOnMainThread([&]() {
-            return static_cast<CFBooleanRef>(TISGetInputSourceProperty(source, kTISPropertyInputSourceIsSelectCapable));
+        const auto sourceFlags = runOnMainThread([&]() {
+            const CFBooleanRef selectCapable = static_cast<CFBooleanRef>(
+                TISGetInputSourceProperty(
+                    source, kTISPropertyInputSourceIsSelectCapable));
+            const CFBooleanRef enabled = static_cast<CFBooleanRef>(
+                TISGetInputSourceProperty(
+                    source, kTISPropertyInputSourceIsEnabled));
+            return std::make_pair(
+                selectCapable == kCFBooleanTrue,
+                enabled == kCFBooleanTrue);
         });
-        if (selectCapable == kCFBooleanTrue) {
+        if (sourceFlags.first && sourceFlags.second) {
             selectableSources.push_back(source);
         }
+
+        LOG_DEBUG1("macOS input source candidate id=%s selectable=%s enabled=%s",
+                   getInputSourceString(
+                       source, kTISPropertyInputSourceID).c_str(),
+                   sourceFlags.first ? "yes" : "no",
+                   sourceFlags.second ? "yes" : "no");
     }
 
     if (selectableSources.empty()) {
