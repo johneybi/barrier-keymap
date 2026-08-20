@@ -1113,12 +1113,14 @@ void OSXKeyState::cycleInputSource(std::int32_t offset)
 
     // Gureum can keep a separate Roman/Hangul composer state for each text
     // client. Selecting its han2 input mode does not always update that state
-    // in browser text fields, so use Gureum's right-key command as well.
+    // in browser text fields. F19 is registered as Gureum's explicit
+    // "switch to Hangul" command during macOS client setup, so send it as a
+    // normal key event after selecting the input method.
     if (status == noErr && offset == 1 && targetId == gureumHangulId &&
         currentId != gureumHangulId) {
-        LOG_DEBUG1("requesting Gureum Hangul mode with right Option command");
-        postHIDVirtualKey(kVK_RightOption, true);
-        postHIDVirtualKey(kVK_RightOption, false);
+        LOG_DEBUG1("requesting Gureum Hangul mode with F19 command");
+        postHIDVirtualKey(kVK_F19, true);
+        postHIDVirtualKey(kVK_F19, false);
     }
 
     if (current != nullptr) {
