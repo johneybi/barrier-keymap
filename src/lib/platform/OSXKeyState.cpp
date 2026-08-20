@@ -712,12 +712,10 @@ OSXKeyState::fakeKey(const Keystroke& keystroke)
                 if (!gureumActive) {
                     cycleInputSource(1);
                 }
-                LOG_DEBUG1("passing Gureum toggle command current=%s gureum=%s",
+                LOG_DEBUG1("passing F19 to active macOS input method current=%s gureum=%s",
                            currentId.c_str(), gureumActive ? "yes" : "no");
-                postHIDVirtualKey(kVK_Shift, true);
-                postHIDVirtualKey(kVK_Space, true);
-                postHIDVirtualKey(kVK_Space, false);
-                postHIDVirtualKey(kVK_Shift, false);
+                postHIDVirtualKey(kVK_F19, true);
+                postHIDVirtualKey(kVK_F19, false);
             }
             break;
         }
