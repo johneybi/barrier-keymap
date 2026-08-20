@@ -693,11 +693,29 @@ OSXKeyState::fakeKey(const Keystroke& keystroke)
             button, virtualKey, keyDown ? "down" : "up");
 
         // F19 is the dedicated macOS target for the Windows Right Alt tap.
-        // Treat it as an input-source command instead of posting a function
-        // key that third-party input methods such as Gureum do not consume.
+        // Keep Gureum active and let its own per-client composer handle the
+        // Roman/Hangul toggle. This avoids trying to infer another app's IME
+        // state from the Input Leap client process.
         if (virtualKey == kVK_F19) {
             if (keyDown && !repeat) {
-                cycleInputSource(1);
+                TISInputSourceRef current = runOnMainThread([]() {
+                    return TISCopyCurrentKeyboardInputSource();
+                });
+                const std::string currentId = getInputSourceString(
+                    current, kTISPropertyInputSourceID);
+                const bool gureumActive =
+                    currentId.find("org.youknowone.inputmethod.Gureum") !=
+                    std::string::npos;
+                if (current != nullptr) {
+                    CFRelease(current);
+                }
+                if (!gureumActive) {
+                    cycleInputSource(1);
+                }
+                LOG_DEBUG1("passing F19 to active macOS input method current=%s gureum=%s",
+                           currentId.c_str(), gureumActive ? "yes" : "no");
+                postHIDVirtualKey(kVK_F19, true);
+                postHIDVirtualKey(kVK_F19, false);
             }
             break;
         }
@@ -1110,18 +1128,6 @@ void OSXKeyState::cycleInputSource(std::int32_t offset)
     LOG_DEBUG1("cycle macOS input source offset=%+d current=%s target=%s status=%d",
                offset, currentId.c_str(), targetId.c_str(),
                static_cast<int>(status));
-
-    // Gureum can keep a separate Roman/Hangul composer state for each text
-    // client. Selecting its han2 input mode does not always update that state
-    // in browser text fields. F19 is registered as Gureum's explicit
-    // "switch to Hangul" command during macOS client setup, so send it as a
-    // normal key event after selecting the input method.
-    if (status == noErr && offset == 1 && targetId == gureumHangulId &&
-        currentId != gureumHangulId) {
-        LOG_DEBUG1("requesting Gureum Hangul mode with F19 command");
-        postHIDVirtualKey(kVK_F19, true);
-        postHIDVirtualKey(kVK_F19, false);
-    }
 
     if (current != nullptr) {
         CFRelease(current);

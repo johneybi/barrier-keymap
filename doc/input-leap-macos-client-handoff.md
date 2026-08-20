@@ -272,20 +272,19 @@ the working Chrome baseline. A universal Safari-compatible solution requires a
 separate virtual HID input device, which is a signed/entitled macOS product
 workstream rather than a server remap change.
 
-## 2026-08-20 Gureum per-client Hangul command
+## 2026-08-20 Gureum per-client mode toggle
 
 Selecting `org.youknowone.inputmethod.Gureum.han2` is not sufficient for every
 browser text client because Gureum can retain a Roman/Hangul composer state per
-client. The macOS client now sends F19 as a normal key after selecting the
-Gureum Hangul source. On this Mac, Gureum's explicit Korean-mode command is
-configured as:
+client. The macOS client now keeps Gureum active and sends F19 as a normal key
+to Gureum's own per-client mode toggle. On this Mac, that command is configured
+as:
 
 ```text
-defaults write org.youknowone.Gureum InputModeKoreanKey \\
+defaults write org.youknowone.Gureum InputModeExchangeKey \\
   -dict modifier -int 0 keyCode -int 80
 ```
 
-The F19 handler consumes the command locally, so it does not appear as text in
-the browser. The previous synthetic Right Option workaround was removed because
-Gureum's right-key path is based on physical IOHID monitoring and does not
-reliably consume synthetic Quartz events.
+The F19 handler consumes the command in Gureum, so it does not appear as text in
+the browser. The previous source-switch and synthetic Right Option workarounds
+were removed because they tried to infer or mutate another app's IME state.
