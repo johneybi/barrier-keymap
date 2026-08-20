@@ -7,6 +7,7 @@ binary="$bundle_dir/input-leapc-vhid"
 helper="$bundle_dir/input-leapc-root-helper.sh"
 state_dir="${TMPDIR:-/tmp}/InputLeapKeymap-${USER:-user}"
 pid_file="$state_dir/client.pid"
+lock_dir="$state_dir/client.lock"
 
 if [ ! -x "$binary" ] || [ ! -x "$helper" ]; then
     echo "Input Leap VHID client files are missing" >&2
@@ -15,6 +16,17 @@ fi
 
 mkdir -p "$state_dir"
 chmod 700 "$state_dir"
+
+# A second GUI instance must not create another root client with the same
+# screen name. The atomic directory creation gives us a simple per-user lock.
+if ! mkdir "$lock_dir" 2>/dev/null; then
+    exit 0
+fi
+
+cleanup() {
+    rm -f "$pid_file"
+    rmdir "$lock_dir" 2>/dev/null || true
+}
 
 shell_quote() {
     printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
@@ -36,9 +48,11 @@ end run
 APPLESCRIPT
         fi
     fi
+    cleanup
 }
 
 trap 'stop_client; exit 143' INT TERM
+trap cleanup EXIT
 
 /usr/bin/osascript - "$command" <<'APPLESCRIPT'
 on run argv
@@ -46,4 +60,4 @@ on run argv
 end run
 APPLESCRIPT
 
-rm -f "$pid_file"
+cleanup
