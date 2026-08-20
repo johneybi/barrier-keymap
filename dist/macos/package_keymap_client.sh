@@ -12,11 +12,23 @@ app="$2"
 contents="$app/Contents"
 version="${INPUTLEAP_KEYMAP_VERSION:-3.0.3}"
 bundle_id="com.johneybi.input-leap-keymap.client"
+use_vhid="${INPUTLEAP_USE_KARABINER_VHID:-0}"
 
 rm -rf "$app"
 mkdir -p "$contents/MacOS" "$contents/Resources"
-cp "$binary" "$contents/MacOS/input-leapc"
-chmod 755 "$contents/MacOS/input-leapc"
+if [ "$use_vhid" = "1" ]; then
+    cp "$binary" "$contents/MacOS/input-leapc-vhid"
+    cp "$(dirname "$0")/privileged_client_launcher.sh" \
+        "$contents/MacOS/input-leapc"
+    cp "$(dirname "$0")/privileged_client_helper.sh" \
+        "$contents/MacOS/input-leapc-root-helper.sh"
+    chmod 755 "$contents/MacOS/input-leapc-vhid" \
+        "$contents/MacOS/input-leapc" \
+        "$contents/MacOS/input-leapc-root-helper.sh"
+else
+    cp "$binary" "$contents/MacOS/input-leapc"
+    chmod 755 "$contents/MacOS/input-leapc"
+fi
 cp "$(dirname "$0")/bundle/InputLeap.app/Contents/Resources/InputLeap.icns" \
     "$contents/Resources/InputLeap.icns"
 

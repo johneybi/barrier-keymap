@@ -15,6 +15,7 @@ contents="$app/Contents"
 bundle_id="com.johneybi.input-leap-keymap.client"
 version="${INPUTLEAP_KEYMAP_VERSION:-3.0.3}"
 macdeployqt="${MACDEPLOYQT:-}"
+use_vhid="${INPUTLEAP_USE_KARABINER_VHID:-0}"
 
 if [ -z "$macdeployqt" ]; then
     macdeployqt="$(command -v macdeployqt || true)"
@@ -27,10 +28,24 @@ fi
 rm -rf "$app"
 mkdir -p "$contents/MacOS" "$contents/Resources"
 cp "$gui" "$contents/MacOS/input-leap"
-cp "$client" "$contents/MacOS/input-leapc"
+if [ "$use_vhid" = "1" ]; then
+    cp "$client" "$contents/MacOS/input-leapc-vhid"
+    cp "$(dirname "$0")/privileged_client_launcher.sh" \
+        "$contents/MacOS/input-leapc"
+    cp "$(dirname "$0")/privileged_client_helper.sh" \
+        "$contents/MacOS/input-leapc-root-helper.sh"
+else
+    cp "$client" "$contents/MacOS/input-leapc"
+fi
 cp "$server" "$contents/MacOS/input-leaps"
-chmod 755 "$contents/MacOS/input-leap" \
-    "$contents/MacOS/input-leapc" "$contents/MacOS/input-leaps"
+chmod 755 "$contents/MacOS/input-leap" "$contents/MacOS/input-leaps"
+if [ "$use_vhid" = "1" ]; then
+    chmod 755 "$contents/MacOS/input-leapc-vhid" \
+        "$contents/MacOS/input-leapc" \
+        "$contents/MacOS/input-leapc-root-helper.sh"
+else
+    chmod 755 "$contents/MacOS/input-leapc"
+fi
 cp "$(dirname "$0")/bundle/InputLeap.app/Contents/Resources/InputLeap.icns" \
     "$contents/Resources/InputLeap.icns"
 cp LICENSE "$contents/Resources/LICENSE.txt"
@@ -72,8 +87,13 @@ cat > "$contents/Info.plist" <<EOF
 </plist>
 EOF
 
+client_binary="$contents/MacOS/input-leapc"
+if [ "$use_vhid" = "1" ]; then
+    client_binary="$contents/MacOS/input-leapc-vhid"
+fi
+
 "$macdeployqt" "$app" -no-strip \
-    -executable="$contents/MacOS/input-leapc" \
+    -executable="$client_binary" \
     -executable="$contents/MacOS/input-leaps"
 
 # Keep Accessibility permission associated with the app across ad-hoc beta
