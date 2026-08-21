@@ -1048,6 +1048,8 @@ bool OSXKeyState::cycleInputSource(std::int32_t offset)
     const std::string abcId = "com.apple.keylayout.ABC";
     const std::string gureumHangulId =
         "org.youknowone.inputmethod.Gureum.han2";
+    const std::string appleKoreanId =
+        "com.apple.inputmethod.Korean.2SetKorean";
 
     CFStringRef keys[] = { kTISPropertyInputSourceCategory };
     CFStringRef values[] = { kTISCategoryKeyboardInputSource };
@@ -1109,24 +1111,40 @@ bool OSXKeyState::cycleInputSource(std::int32_t offset)
 
     // Gureum exposes more than one selectable input-source entry. Cycling the
     // complete list can therefore land on Gureum's Roman mode in one direction
-    // and on its Hangul mode in the other. For the F19 toggle, prefer the two
-    // concrete sources the user actually wants and keep the generic fallback
-    // for other configurations.
+    // and on its Hangul mode in the other. Prefer a concrete Hangul source,
+    // but fall back to Apple's built-in Korean source when Gureum is not
+    // enabled. This keeps the F19 protocol usable after an input-source reset.
     TISInputSourceRef target = nullptr;
     if (offset == 1) {
-        const std::string desiredId = currentId == gureumHangulId
-            ? abcId
-            : gureumHangulId;
-        for (TISInputSourceRef source : selectableSources) {
-            if (getInputSourceString(source, kTISPropertyInputSourceID) ==
-                desiredId) {
-                target = source;
-                break;
+        if (currentId == gureumHangulId || currentId == appleKoreanId) {
+            for (TISInputSourceRef source : selectableSources) {
+                if (getInputSourceString(source, kTISPropertyInputSourceID) ==
+                    abcId) {
+                    target = source;
+                    break;
+                }
+            }
+        }
+        else {
+            for (const std::string& desiredId :
+                 {gureumHangulId, appleKoreanId}) {
+                for (TISInputSourceRef source : selectableSources) {
+                    if (getInputSourceString(
+                            source, kTISPropertyInputSourceID) == desiredId) {
+                        target = source;
+                        break;
+                    }
+                }
+                if (target != nullptr) {
+                    break;
+                }
             }
         }
         if (target != nullptr) {
             LOG_DEBUG1("selecting deterministic macOS input source current=%s target=%s",
-                       currentId.c_str(), desiredId.c_str());
+                       currentId.c_str(),
+                       getInputSourceString(
+                           target, kTISPropertyInputSourceID).c_str());
         }
     }
 
@@ -1152,7 +1170,30 @@ bool OSXKeyState::cycleInputSource(std::int32_t offset)
     }
     CFRelease(sources);
 
-    return status == noErr && targetId == gureumHangulId;
+    if (status != noErr) {
+        return false;
+    }
+
+    // TISSelectInputSource can return before the active application has
+    // observed the new input session. Poll briefly instead of racing the
+    // first remote character, especially in Safari text fields.
+    for (int attempt = 0; attempt < 8; ++attempt) {
+        TISInputSourceRef active = runOnMainThread([]() {
+            return TISCopyCurrentKeyboardInputSource();
+        });
+        const std::string activeId = getInputSourceString(
+            active, kTISPropertyInputSourceID);
+        if (active != nullptr) {
+            CFRelease(active);
+        }
+        if (activeId == targetId) {
+            return true;
+        }
+        this_thread_sleep(0.025);
+    }
+
+    LOG_WARN("macOS input source did not activate target=%s", targetId.c_str());
+    return false;
 }
 
 void
