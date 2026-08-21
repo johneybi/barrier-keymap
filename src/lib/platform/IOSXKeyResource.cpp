@@ -18,8 +18,25 @@
 #include "platform/IOSXKeyResource.h"
 
 #include <Carbon/Carbon.h>
+#include <dispatch/dispatch.h>
+
+#include <pthread.h>
 
 namespace inputleap {
+
+template <typename Func>
+static auto runOnMainThread(Func&& func) -> decltype(func())
+{
+    if (pthread_main_np()) {
+        return func();
+    }
+
+    __block decltype(func()) result;
+    dispatch_sync(dispatch_get_main_queue(), ^{
+        result = func();
+    });
+    return result;
+}
 
 KeyID IOSXKeyResource::getKeyID(std::uint8_t c)
 {
@@ -115,11 +132,35 @@ KeyID IOSXKeyResource::getKeyID(std::uint8_t c)
         str[0] = static_cast<char>(c);
         str[1] = 0;
 
-        // get current keyboard script
-        TISInputSourceRef isref = TISCopyCurrentKeyboardInputSource();
-        CFArrayRef langs = (CFArrayRef) TISGetInputSourceProperty(isref, kTISPropertyInputSourceLanguages);
-        CFStringEncoding encoding = CFStringConvertIANACharSetNameToEncoding(
-                                        (CFStringRef)CFArrayGetValueAtIndex(langs, 0));
+        // Text Input Sources Manager is not thread-safe. Keep the complete
+        // lookup on the main thread, including the borrowed language value.
+        TISInputSourceRef isref = runOnMainThread([]() {
+            return TISCopyCurrentKeyboardInputSource();
+        });
+        if (isref == nullptr) {
+            return kKeyNone;
+        }
+
+        const CFStringEncoding encoding = runOnMainThread([&]() {
+            CFArrayRef langs = static_cast<CFArrayRef>(
+                TISGetInputSourceProperty(
+                    isref, kTISPropertyInputSourceLanguages));
+            if (langs == nullptr || CFArrayGetCount(langs) == 0) {
+                return kCFStringEncodingInvalidId;
+            }
+
+            CFStringRef language = static_cast<CFStringRef>(
+                CFArrayGetValueAtIndex(langs, 0));
+            if (language == nullptr) {
+                return kCFStringEncodingInvalidId;
+            }
+
+            return CFStringConvertIANACharSetNameToEncoding(language);
+        });
+        CFRelease(isref);
+        if (encoding == kCFStringEncodingInvalidId) {
+            return kKeyNone;
+        }
         // convert to unicode
         CFStringRef cfString =
             CFStringCreateWithCStringNoCopy(
