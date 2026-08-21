@@ -25,6 +25,7 @@ if ! mkdir "$lock_dir" 2>/dev/null; then
 fi
 
 cleanup() {
+    "$binary" --karabiner-vhid-shutdown "$socket_path" >/dev/null 2>&1 || true
     rm -f "$helper_pid_file" "$socket_path"
     rmdir "$lock_dir" 2>/dev/null || true
 }
@@ -66,25 +67,6 @@ helper_is_running() {
     esac
 }
 
-stop_helper() {
-    if [ -f "$helper_pid_file" ]; then
-        helper_child_pid="$(cat "$helper_pid_file" 2>/dev/null || true)"
-        case "$helper_child_pid" in
-            ''|*[!0-9]*) ;;
-            *)
-                if ! helper_is_running; then
-                    return
-                fi
-                /usr/bin/osascript - "$helper_child_pid" <<'APPLESCRIPT' >/dev/null 2>&1 || true
-on run argv
-    do shell script "/bin/kill -TERM " & quoted form of (item 1 of argv) with administrator privileges
-end run
-APPLESCRIPT
-                ;;
-        esac
-    fi
-}
-
 stop_client() {
     if [ -n "$client_pid" ]; then
         kill -TERM "$client_pid" 2>/dev/null || true
@@ -92,7 +74,6 @@ stop_client() {
     if [ -n "$auth_pid" ]; then
         kill -TERM "$auth_pid" 2>/dev/null || true
     fi
-    stop_helper
     cleanup
 }
 

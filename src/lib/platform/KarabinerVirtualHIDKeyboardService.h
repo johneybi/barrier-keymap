@@ -33,5 +33,6 @@ private:
 };
 
 int runKarabinerVirtualHIDKeyboardService(const char* socketPath, unsigned int ownerUid);
+int requestKarabinerVirtualHIDKeyboardServiceShutdown(const char* socketPath);
 
 } // namespace inputleap

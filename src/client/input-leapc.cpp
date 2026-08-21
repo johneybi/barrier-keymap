@@ -79,6 +79,9 @@ int main(int argc, char** argv)
         return inputleap::runKarabinerVirtualHIDKeyboardService(
             argv[2], static_cast<unsigned int>(ownerUid));
     }
+    if (argc == 3 && std::strcmp(argv[1], "--karabiner-vhid-shutdown") == 0) {
+        return inputleap::requestKarabinerVirtualHIDKeyboardServiceShutdown(argv[2]);
+    }
 #endif
     return inputleap::client_main(argc, argv);
 }

@@ -344,6 +344,9 @@ int runKarabinerVirtualHIDKeyboardService(const char* socketPath, unsigned int o
             break;
         }
         if (received == sizeof(packet)) {
+            if (packet[0] == 0xff && packet[1] == 0) {
+                break;
+            }
             keyboard.postKey(packet[0], packet[1] != 0);
         }
     }
@@ -351,6 +354,33 @@ int runKarabinerVirtualHIDKeyboardService(const char* socketPath, unsigned int o
     close(socketFd);
     unlink(socketPath);
     return 0;
+}
+
+int requestKarabinerVirtualHIDKeyboardServiceShutdown(const char* socketPath)
+{
+    if (socketPath == nullptr || *socketPath == '\0') {
+        return 2;
+    }
+
+    const int socketFd = socket(AF_UNIX, SOCK_DGRAM, 0);
+    if (socketFd < 0) {
+        return 1;
+    }
+
+    sockaddr_un address{};
+    address.sun_family = AF_UNIX;
+    if (std::strlen(socketPath) >= sizeof(address.sun_path)) {
+        close(socketFd);
+        return 2;
+    }
+    std::strncpy(address.sun_path, socketPath, sizeof(address.sun_path) - 1);
+
+    const std::uint8_t packet[2] = {0xff, 0};
+    const ssize_t sent = sendto(socketFd, packet, sizeof(packet), 0,
+                                reinterpret_cast<const sockaddr*>(&address),
+                                sizeof(address));
+    close(socketFd);
+    return sent == static_cast<ssize_t>(sizeof(packet)) ? 0 : 1;
 }
 
 } // namespace inputleap
