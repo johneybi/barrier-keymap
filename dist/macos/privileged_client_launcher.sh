@@ -67,6 +67,17 @@ helper_is_running() {
     esac
 }
 
+helper_for_socket_is_running() {
+    if [ ! -S "$socket_path" ]; then
+        return 1
+    fi
+
+    running_helper="$(ps -axo user=,command= | awk -v socket="$socket_path" \
+        '$1 == "root" && index($0, "--karabiner-vhid-helper") && \
+         index($0, socket) { print; exit }')"
+    [ -n "$running_helper" ]
+}
+
 stop_client() {
     if [ -n "$client_pid" ]; then
         kill -TERM "$client_pid" 2>/dev/null || true
@@ -89,7 +100,7 @@ client_pid=$!
 
 # The VHID driver needs administrator privileges, but this prompt must not
 # block the user-session client above.
-if ! helper_is_running; then
+if ! helper_is_running && ! helper_for_socket_is_running; then
     start_helper >/dev/null 2>&1 &
     auth_pid=$!
 fi
