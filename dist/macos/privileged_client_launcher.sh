@@ -46,12 +46,35 @@ end run
 APPLESCRIPT
 }
 
+helper_is_running() {
+    if [ ! -f "$helper_pid_file" ]; then
+        return 1
+    fi
+
+    helper_pid="$(cat "$helper_pid_file" 2>/dev/null || true)"
+    case "$helper_pid" in
+        ''|*[!0-9]*) return 1 ;;
+    esac
+    if ! kill -0 "$helper_pid" 2>/dev/null; then
+        return 1
+    fi
+
+    helper_command_line="$(ps -p "$helper_pid" -o command= 2>/dev/null || true)"
+    case "$helper_command_line" in
+        *"--karabiner-vhid-helper"*) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
 stop_helper() {
     if [ -f "$helper_pid_file" ]; then
         helper_child_pid="$(cat "$helper_pid_file" 2>/dev/null || true)"
         case "$helper_child_pid" in
             ''|*[!0-9]*) ;;
             *)
+                if ! helper_is_running; then
+                    return
+                fi
                 /usr/bin/osascript - "$helper_child_pid" <<'APPLESCRIPT' >/dev/null 2>&1 || true
 on run argv
     do shell script "/bin/kill -TERM " & quoted form of (item 1 of argv) with administrator privileges
@@ -85,8 +108,10 @@ client_pid=$!
 
 # The VHID driver needs administrator privileges, but this prompt must not
 # block the user-session client above.
-start_helper >/dev/null 2>&1 &
-auth_pid=$!
+if ! helper_is_running; then
+    start_helper >/dev/null 2>&1 &
+    auth_pid=$!
+fi
 
 client_status=0
 wait "$client_pid" || client_status=$?
