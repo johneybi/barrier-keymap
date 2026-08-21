@@ -21,12 +21,24 @@ chmod 700 "$state_dir"
 # A second GUI instance must not create another root client with the same
 # screen name. The atomic directory creation gives us a simple per-user lock.
 if ! mkdir "$lock_dir" 2>/dev/null; then
-    exit 0
+    lock_pid="$(cat "$lock_dir/pid" 2>/dev/null || true)"
+    case "$lock_pid" in
+        ''|*[!0-9]*) ;;
+        *)
+            if kill -0 "$lock_pid" 2>/dev/null; then
+                exit 0
+            fi
+            ;;
+    esac
+    rmdir "$lock_dir" 2>/dev/null || exit 0
+    mkdir "$lock_dir"
 fi
+printf '%s\n' "$$" > "$lock_dir/pid"
 
 cleanup() {
     "$binary" --karabiner-vhid-shutdown "$socket_path" >/dev/null 2>&1 || true
     rm -f "$helper_pid_file" "$socket_path"
+    rm -f "$lock_dir/pid"
     rmdir "$lock_dir" 2>/dev/null || true
 }
 
