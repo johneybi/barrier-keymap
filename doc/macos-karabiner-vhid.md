@@ -27,6 +27,12 @@ event messages between the client and the privileged helper. It also keeps a
 per-user lock so two clients with the same screen name are not started by
 accident.
 
-To package the GUI with the privileged launcher, set
+To package the GUI with the regular user-session client, set
 `INPUTLEAP_USE_KARABINER_VHID=1` when invoking
-`dist/macos/package_keymap_gui.sh`.
+`dist/macos/package_keymap_gui.sh`. This keeps the normal Input Leap and
+pasteboard paths free of administrator prompts; unsupported VHID output falls
+back to the existing macOS event path.
+
+The privileged helper is experimental and opt-in. Enable it explicitly with
+`INPUTLEAP_USE_KARABINER_VHID_ROOT=1` in addition to
+`INPUTLEAP_USE_KARABINER_VHID=1`.

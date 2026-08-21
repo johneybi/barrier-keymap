@@ -15,6 +15,7 @@ contents="$app/Contents"
 version="${INPUTLEAP_KEYMAP_VERSION:-3.0.3}"
 macdeployqt="${MACDEPLOYQT:-}"
 use_vhid="${INPUTLEAP_USE_KARABINER_VHID:-0}"
+use_vhid_root="${INPUTLEAP_USE_KARABINER_VHID_ROOT:-0}"
 bundle_id="com.johneybi.input-leap-keymap.client"
 if [ "$use_vhid" = "1" ]; then
     bundle_id="com.johneybi.input-leap-keymap.vhid"
@@ -33,19 +34,27 @@ mkdir -p "$contents/MacOS" "$contents/Resources"
 cp "$gui" "$contents/MacOS/input-leap"
 if [ "$use_vhid" = "1" ]; then
     cp "$client" "$contents/MacOS/input-leapc-vhid"
-    cp "$(dirname "$0")/privileged_client_launcher.sh" \
-        "$contents/MacOS/input-leapc"
-    cp "$(dirname "$0")/privileged_client_helper.sh" \
-        "$contents/MacOS/input-leapc-root-helper.sh"
+    if [ "$use_vhid_root" = "1" ]; then
+        cp "$(dirname "$0")/privileged_client_launcher.sh" \
+            "$contents/MacOS/input-leapc"
+        cp "$(dirname "$0")/privileged_client_helper.sh" \
+            "$contents/MacOS/input-leapc-root-helper.sh"
+    else
+        cp "$client" "$contents/MacOS/input-leapc"
+    fi
 else
     cp "$client" "$contents/MacOS/input-leapc"
 fi
 cp "$server" "$contents/MacOS/input-leaps"
 chmod 755 "$contents/MacOS/input-leap" "$contents/MacOS/input-leaps"
 if [ "$use_vhid" = "1" ]; then
-    chmod 755 "$contents/MacOS/input-leapc-vhid" \
-        "$contents/MacOS/input-leapc" \
-        "$contents/MacOS/input-leapc-root-helper.sh"
+    if [ "$use_vhid_root" = "1" ]; then
+        chmod 755 "$contents/MacOS/input-leapc-vhid" \
+            "$contents/MacOS/input-leapc" \
+            "$contents/MacOS/input-leapc-root-helper.sh"
+    else
+        chmod 755 "$contents/MacOS/input-leapc-vhid" "$contents/MacOS/input-leapc"
+    fi
 else
     chmod 755 "$contents/MacOS/input-leapc"
 fi
@@ -92,7 +101,11 @@ EOF
 
 client_binary="$contents/MacOS/input-leapc"
 if [ "$use_vhid" = "1" ]; then
-    client_binary="$contents/MacOS/input-leapc-vhid"
+    if [ "$use_vhid_root" = "1" ]; then
+        client_binary="$contents/MacOS/input-leapc-vhid"
+    else
+        client_binary="$contents/MacOS/input-leapc"
+    fi
 fi
 
 "$macdeployqt" "$app" -no-strip \
