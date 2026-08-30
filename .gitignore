@@ -2,6 +2,8 @@ build_env.*
 config.h
 .DS_Store
 *.pyc
+*.log
+*.log.*
 *.o
 *~
 \.*.swp
@@ -9,6 +11,8 @@ config.h
 /bin
 /lib
 /build
+/build-*/
+/out/
 /CMakeFiles
 /ext/cryptopp562
 /ext/openssl
