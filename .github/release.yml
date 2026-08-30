@@ -1,0 +1,38 @@
+changelog:
+  categories:
+    - title: User-facing changes
+      labels:
+        - feature
+        - enhancement
+        - bug
+    - title: Platform support
+      labels:
+        - platform
+        - macos
+        - windows
+        - linux
+    - title: Documentation and maintenance
+      labels:
+        - documentation
+        - maintenance
+        - dependencies
+    - title: Other changes
+      labels:
+        - "*"
+  exclude:
+    labels:
+      - skip-changelog
+    authors:
+      - dependabot
+      - dependabot[bot]
+  template: |
+    ## KeyStitch release
+
+    KeyStitch keeps keyboard behavior consistent across machines while
+    preserving Barrier's cross-platform input workflow.
+
+    ## Verification
+
+    - CI has passed for the release commit.
+    - The distributed tag and commit are recorded in the release metadata.
+    - Checksums are included alongside each archive.
