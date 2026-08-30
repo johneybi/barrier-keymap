@@ -1,5 +1,9 @@
 # KeyStitch
 
+```text
+⌘  ——  KeyStitch  ——  Ctrl
+```
+
 **Seamless input across machines.**
 
 KeyStitch is a Barrier-based cross-platform input project that keeps keyboard
@@ -67,7 +71,7 @@ syntax, examples, limitations, and verification commands.
 ## Downloads
 
 Download Linux and macOS builds from the
-[releases page](https://github.com/johneybi/barrier-keymap/releases). Releases
+[releases page](https://github.com/johneybi/keystitch/releases). Releases
 include `.sha256` files for verifying downloaded archives.
 
 ## Documentation
@@ -103,7 +107,7 @@ semantics.
 
 For KeyStitch remapping, packaging, or release issues, open an issue in this
 repository:
-<https://github.com/johneybi/barrier-keymap/issues>.
+<https://github.com/johneybi/keystitch/issues>.
 
 For bugs that also reproduce in upstream Barrier without a `section: remaps`
 configuration, report them to the
