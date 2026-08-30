@@ -106,7 +106,7 @@ include `.sha256` files for verifying downloaded archives.
 ## Documentation
 
 - [Key remaps](doc/key-remaps.md)
-- [Windows/macOS live baseline](doc/live-windows-mac-baseline.md)
+- [Windows/macOS test handoff](doc/mac-windows-test-handoff.md)
 - [macOS virtual HID keyboard](doc/macos-virtual-hid-keyboard.md)
 - [macOS client input stutter](doc/macos-client-input-stutter.md)
 - [Release checklist](doc/release-checklist.md)

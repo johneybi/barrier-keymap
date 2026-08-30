@@ -21,7 +21,7 @@ maintained open-source codebase.
 ## Testing and operations
 
 - [Testing strategy](testing/strategy.md)
-- [Live Windows/macOS baseline](../doc/live-windows-mac-baseline.md)
+- [Windows/macOS test handoff](../doc/mac-windows-test-handoff.md)
 - [macOS input investigations](../doc/macos-client-input-stutter.md)
 - [macOS virtual HID notes](../doc/macos-virtual-hid-keyboard.md)
 

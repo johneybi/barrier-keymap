@@ -3,6 +3,7 @@ name: Release
 on:
   push:
     tags:
+      - "keystitch-v*"
       - "keymap-v*"
   workflow_dispatch:
     inputs:
@@ -23,9 +24,9 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            artifact: barrier-keymap-linux-x64
+            artifact: keystitch-linux-x64
           - os: macos-latest
-            artifact: barrier-keymap-macos
+            artifact: keystitch-macos
 
     steps:
       - name: Check out
@@ -158,14 +159,23 @@ jobs:
         shell: cmd
         run: build_installer.bat
 
+      - name: Normalize Windows installer name
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem build\installer-inno\bin\*.exe | Select-Object -First 1
+          if ($null -eq $installer) {
+            throw "No Windows installer was produced"
+          }
+          Copy-Item $installer.FullName build\installer-inno\bin\keystitch-windows-x64.exe -Force
+
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: barrier-keymap-windows-installer
-          path: build\installer-inno\bin\*.exe
+          name: keystitch-windows-x64
+          path: build\installer-inno\bin\keystitch-windows-x64.exe
 
       - name: Upload GitHub release asset
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: build/installer-inno/bin/*.exe
+          files: build/installer-inno/bin/keystitch-windows-x64.exe
