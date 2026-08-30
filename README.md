@@ -1,46 +1,75 @@
 # KeyStitch
 
 ```text
-⌘  ——  KeyStitch  ——  Ctrl
+⌘  ───────  KeyStitch  ───────  Ctrl
 ```
 
 **Seamless input across machines.**
 
-KeyStitch is a Barrier-based cross-platform input project that keeps keyboard
-behavior consistent across Windows, macOS, and Linux. It preserves Barrier's
-familiar mouse-edge switching while translating OS-specific keyboard meaning
-before remote input reaches the target machine.
+> A Barrier-based cross-platform input project that preserves natural keyboard
+> behavior across Windows, macOS, and Linux.
 
-## Why KeyStitch?
+[![CI](https://github.com/johneybi/keystitch/actions/workflows/keymap-ci.yml/badge.svg)](https://github.com/johneybi/keystitch/actions/workflows/keymap-ci.yml)
+[![Releases](https://img.shields.io/github/v/release/johneybi/keystitch?include_prereleases&label=release)](https://github.com/johneybi/keystitch/releases)
 
-Barrier makes the pointer move naturally between computers, but keyboard
-behavior does not always travel with it. `Ctrl`, `Command`, `Alt`, `Option`,
-`Hangul`, input-source switching, and left/right modifier keys can mean
-different things on different operating systems.
+Barrier lets one keyboard and mouse control multiple computers. KeyStitch keeps
+the keyboard's meaning intact while the pointer moves between them.
 
-KeyStitch addresses that seam in the input path:
+## The problem
+
+The pointer can cross an OS boundary naturally. Keyboard semantics often cannot:
+
+- `Ctrl` and `Command` are not interchangeable
+- `Alt` and `Option` have different meanings
+- left and right modifiers can arrive as different events
+- Korean Windows layouts may report Right Alt as `Hangul`
+- input-source switching depends on the receiving platform
+
+Tools such as Karabiner-Elements and AutoHotkey are useful on local machines,
+but remote Barrier input may not reach them as ordinary local keyboard input.
+
+## The insight
+
+> Instead of fixing the key after it reaches the destination OS, translate its
+> meaning before Barrier sends it.
+
+## The solution
+
+KeyStitch adds a target-screen-aware input semantics layer to Barrier. The
+existing mouse-edge switching experience stays intact, while configured
+keyboard rules are translated for the destination machine.
 
 ```text
-Keyboard / mouse
-       ↓
-Barrier server
-       ↓
-KeyStitch input semantics
-       ↓
-Barrier protocol
-       ↓
-Windows / macOS / Linux
+Physical keyboard / mouse
+          │
+          ▼
+    Barrier server
+          │
+          ▼
+   ┌────────────────┐
+   │   KeyStitch    │
+   │  Remap         │
+   │  Tap / Hold    │
+   │  Modifiers     │
+   │  Input source  │
+   └────────────────┘
+          │
+    Barrier protocol
+          │
+     ┌────┴────┐
+     ▼         ▼
+  Windows    macOS
 ```
 
-## What it adds
+## What KeyStitch adds
 
-- Per-screen key remapping
-- Tap/hold behavior
-- Modifier-chord translation
-- Left/right modifier handling
-- Korean Windows `Right Alt` / `Hangul` handling
-- macOS extended-key support
-- Cross-platform build and release packaging
+- **Per-screen remapping** — rules can target a specific remote machine
+- **Tap / hold modifiers** — one key can have separate tap and hold behavior
+- **Cross-OS modifier translation** — map Windows and macOS conventions
+- **Hotkey chord remapping** — translate combinations such as `Control+Space`
+- **Korean Hangul key handling** — distinguish `Right Alt` and `Hangul`
+- **Extended macOS function keys** — support platform-specific key paths
+- **Keyboard + mouse sharing** — the proven Barrier workflow remains intact
 
 The remapping layer only affects configured keyboard rules on configured
 screens. Barrier's normal mouse and clipboard behavior remains available.
