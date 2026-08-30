@@ -10,7 +10,7 @@ one source are therefore not portable across layouts and keyboard paths.
 
 Keep `right_alt` and `hangul` available as separate source names, and allow
 users to map either source explicitly. The expected behavior is documented in
-the [live Windows/macOS baseline](../../doc/live-windows-mac-baseline.md).
+the [Windows/macOS test handoff](../../doc/mac-windows-test-handoff.md).
 
 ## Consequences
 
