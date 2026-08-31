@@ -7,7 +7,10 @@ or AutoHotkey for the supported remap subset.
 
 Remaps are configured in a `section: remaps` block. Put this section after
 `section: screens`, because remap targets are validated against known screen
-names.
+names. Rules are never enabled by a compiled-in default: the screen label in
+this section must exactly match the configured client name. For example, a
+client started with `--name ESKui-MacBookPro` needs an
+`ESKui-MacBookPro:` remap block, not the illustrative `mac:` block below.
 
 ```text
 section: remaps
