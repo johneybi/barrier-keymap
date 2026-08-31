@@ -23,7 +23,6 @@
 #include <termios.h> // tcgetattr/tcsetattr
 #include <fcntl.h>
 #include <errno.h>
-#include <assert.h>
 
 NonBlockingStream::NonBlockingStream(int fd) :
     _fd(fd)
@@ -53,7 +52,14 @@ bool NonBlockingStream::try_read_char(char &ch) const
     int result = read(_fd, &ch, 1);
     if (result == 1)
         return true;
-    assert(result == -1 && (errno == EAGAIN || errno == EWOULDBLOCK));
+
+    // A LaunchAgent has no terminal attached, so stdin may be closed rather
+    // than merely returning EAGAIN. Treat both cases as no shutdown command.
+    if (result == 0 || (result == -1 &&
+        (errno == EAGAIN || errno == EWOULDBLOCK))) {
+        return false;
+    }
+
     return false;
 }
 
