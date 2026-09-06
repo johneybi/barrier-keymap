@@ -143,6 +143,12 @@ MainWindow::MainWindow(QSettings& settings, AppConfig& appConfig) :
     setAttribute(Qt::WA_X11NetWmWindowTypeDialog, true);
 
     ui_->setupUi(this);
+    restart_timer_.setSingleShot(true);
+    connect(&restart_timer_, &QTimer::timeout, this, [this]() {
+        if (m_ExpectedRunningState == kStarted) {
+            start_cmd_app();
+        }
+    });
     setWindowIcon(QIcon(APP_LARGE_ICON));
     createMenuBar();
     loadSettings();
@@ -199,6 +205,7 @@ MainWindow::MainWindow(QSettings& settings, AppConfig& appConfig) :
 
 MainWindow::~MainWindow()
 {
+    restart_timer_.stop();
     if (appConfig().processMode() == Desktop) {
         m_ExpectedRunningState = kStopped;
         stopDesktop();
@@ -564,6 +571,7 @@ void MainWindow::proofreadInfo()
 
 void MainWindow::start_cmd_app()
 {
+    restart_timer_.stop();
     bool desktopMode = appConfig().processMode() == Desktop;
     bool serviceMode = appConfig().processMode() == Service;
 
@@ -671,6 +679,8 @@ void MainWindow::start_cmd_app()
             QMessageBox::warning(this, tr("Program can not be started"), QString(tr("The executable<br><br>%1<br><br>could not be successfully started, although it does exist. Please check if you have sufficient permissions to run this program.").arg(app)));
             return;
         }
+        appendLogInfo(QString("desktop process started pid=%1")
+                      .arg(cmd_app_process_->processId()));
     }
 
     if (serviceMode)
@@ -815,6 +825,8 @@ bool MainWindow::serverArgs(QStringList& args, QString& app)
 
 void MainWindow::stop_cmd_app()
 {
+    restart_timer_.stop();
+    restart_delay_ms_ = 1000;
     appendLogDebug("stopping process");
 
     m_ExpectedRunningState = kStopped;
@@ -856,16 +868,19 @@ void MainWindow::stopDesktop()
 
     appendLogInfo("stopping InputLeap desktop process");
 
-    if (cmd_app_process_->isOpen()) {
+    // waitForFinished can dispatch finished(); detach before entering it.
+    QProcess* process = cmd_app_process_;
+    cmd_app_process_ = nullptr;
+    disconnect(process, nullptr, this, nullptr);
+    if (process->isOpen()) {
 #if SYSAPI_UNIX
-        kill(cmd_app_process_->processId(), SIGTERM);
-        cmd_app_process_->waitForFinished(5000);
+        process->terminate();
+        process->waitForFinished(5000);
 #endif
-        cmd_app_process_->close();
+        process->close();
     }
 
-    delete cmd_app_process_;
-    cmd_app_process_ = nullptr;
+    delete process;
 }
 
 void MainWindow::cmd_app_finished(int exitCode, QProcess::ExitStatus)
@@ -892,8 +907,10 @@ void MainWindow::cmd_app_finished(int exitCode, QProcess::ExitStatus)
     }
 
     if (m_ExpectedRunningState == kStarted) {
-        QTimer::singleShot(1000, this, &MainWindow::start_cmd_app);
-        appendLogInfo(QString("detected process not running, auto restarting"));
+        restart_timer_.start(restart_delay_ms_);
+        appendLogInfo(QString("process exited; restart scheduled in %1 ms")
+                      .arg(restart_delay_ms_));
+        restart_delay_ms_ = qMin(restart_delay_ms_ * 2, 30000);
     }
     else {
         set_connection_state(AppConnectionState::DISCONNECTED);
@@ -902,6 +919,9 @@ void MainWindow::cmd_app_finished(int exitCode, QProcess::ExitStatus)
 
 void MainWindow::set_connection_state(AppConnectionState state)
 {
+    if (state == AppConnectionState::CONNECTED) {
+        restart_delay_ms_ = 1000;
+    }
     if (connection_state() == state)
         return;
 

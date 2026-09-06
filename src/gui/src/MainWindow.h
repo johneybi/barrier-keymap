@@ -26,6 +26,7 @@
 #include <QSettings>
 #include <QProcess>
 #include <QThread>
+#include <QTimer>
 
 
 
@@ -170,6 +171,8 @@ public slots:
         QSettings& m_Settings;
         AppConfig* m_AppConfig;
         QProcess* cmd_app_process_;
+        QTimer restart_timer_;
+        int restart_delay_ms_ = 1000;
         AppConnectionState connection_state_ = AppConnectionState::DISCONNECTED;
         ServerConfig m_ServerConfig;
         QTemporaryFile* m_pTempConfigFile;
