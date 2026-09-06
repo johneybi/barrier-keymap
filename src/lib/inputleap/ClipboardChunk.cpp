@@ -26,8 +26,6 @@
 
 namespace inputleap {
 
-size_t ClipboardChunk::s_expectedSize = 0;
-
 ClipboardChunk ClipboardChunk::start(ClipboardID id, std::uint32_t sequence,
                                      const std::size_t& size)
 {
@@ -60,7 +58,7 @@ ClipboardChunk ClipboardChunk::end(ClipboardID id, std::uint32_t sequence)
 }
 
 int ClipboardChunk::assemble(inputleap::IStream* stream, std::string& dataCached,
-                             ClipboardID& id, std::uint32_t& sequence)
+                             std::size_t& expectedSize, ClipboardID& id, std::uint32_t& sequence)
 {
     std::uint8_t mark;
     std::string data;
@@ -70,7 +68,7 @@ int ClipboardChunk::assemble(inputleap::IStream* stream, std::string& dataCached
     }
 
     if (mark == kDataStart) {
-        s_expectedSize = inputleap::string::stringToSizeType(data);
+        expectedSize = inputleap::string::stringToSizeType(data);
         LOG_DEBUG("start receiving clipboard data");
         dataCached.clear();
         return kStart;
@@ -84,8 +82,8 @@ int ClipboardChunk::assemble(inputleap::IStream* stream, std::string& dataCached
         if (id >= kClipboardEnd) {
             return kError;
         }
-        else if (s_expectedSize != dataCached.size()) {
-            LOG_ERR("corrupted clipboard data, expected size=%zd actual size=%zd", s_expectedSize, dataCached.size());
+        else if (expectedSize != dataCached.size()) {
+            LOG_ERR("corrupted clipboard data, expected size=%zd actual size=%zd", expectedSize, dataCached.size());
             return kError;
         }
         return kFinish;

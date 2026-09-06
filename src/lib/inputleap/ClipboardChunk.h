@@ -35,18 +35,15 @@ public:
     static ClipboardChunk data(ClipboardID id, std::uint32_t sequence, const std::string& data);
     static ClipboardChunk end(ClipboardID id, std::uint32_t sequence);
 
-    static int assemble(inputleap::IStream* stream, std::string& dataCached, ClipboardID& id,
+    static int assemble(inputleap::IStream* stream, std::string& dataCached,
+                        std::size_t& expectedSize, ClipboardID& id,
                         std::uint32_t& sequence);
-
-    static size_t getExpectedSize() { return s_expectedSize; }
 
     std::uint8_t id_ = 0;
     std::uint32_t sequence_ = 0;
     std::uint8_t mark_ = 0;
     std::string data_;
 
-private:
-    static size_t        s_expectedSize;
 };
 
 } // namespace inputleap

@@ -19,6 +19,7 @@
 #pragma once
 
 #include "inputleap/clipboard_types.h"
+#include "inputleap/ClipboardSender.h"
 #include "inputleap/key_types.h"
 #include "inputleap/Fwd.h"
 #include "base/Fwd.h"
@@ -107,7 +108,7 @@ private:
     void infoAcknowledgment();
     void fileChunkReceived();
     void dragInfoReceived();
-    void handle_clipboard_sending_event(const Event&);
+    void send_clipboard_chunk(const ClipboardChunk&);
     void logProtocolHealth();
 
 private:
@@ -144,6 +145,9 @@ private:
 
     MessageParser m_parser;
     IEventQueue* m_events;
+    ClipboardSender m_clipboardSender;
+    std::string m_clipboardReceiveData;
+    std::size_t m_clipboardExpectedSize = 0;
 };
 
 } // namespace inputleap

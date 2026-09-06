@@ -23,7 +23,6 @@
 #include "inputleap/ClipboardChunk.h"
 #include "inputleap/Exceptions.h"
 #include "inputleap/FileChunk.h"
-#include "inputleap/StreamChunker.h"
 #include "server/Server.h"
 #include "io/IStream.h"
 #include "base/Log.h"
@@ -43,7 +42,8 @@ ClientProxy1_6::ClientProxy1_6(const std::string& name,
     m_events(events),
     m_keepAliveRate(kKeepAliveRate),
     m_keepAliveTimer(nullptr),
-    m_server{server}
+    m_server{server},
+    m_clipboardSender(events, [this](const auto& chunk) { send_clipboard_chunk(chunk); })
 {
     // install event handlers
     m_events->add_handler(EventType::STREAM_INPUT_READY, get_conn().get_event_target(),
@@ -58,8 +58,6 @@ ClientProxy1_6::ClientProxy1_6(const std::string& name,
                           [this](const auto& e){ handle_write_error(); });
     m_events->add_handler(EventType::FILE_KEEPALIVE, this,
                           [this](const auto& e){ keepAlive(); });
-    m_events->add_handler(EventType::CLIPBOARD_SENDING, this,
-                          [this](const auto& e){ handle_clipboard_sending_event(e); });
     m_events->add_handler(EventType::TIMER, this,
                           [this](const auto& e){ handle_flatline(); });
 
@@ -89,6 +87,7 @@ void ClientProxy1_6::disconnect()
 
 void ClientProxy1_6::remove_handlers()
 {
+    m_clipboardSender.cancel();
     // uninstall event handlers
     m_events->remove_handler(EventType::STREAM_INPUT_READY, get_conn().get_event_target());
     m_events->remove_handler(EventType::STREAM_OUTPUT_ERROR, get_conn().get_event_target());
@@ -96,7 +95,6 @@ void ClientProxy1_6::remove_handlers()
     m_events->remove_handler(EventType::STREAM_OUTPUT_SHUTDOWN, get_conn().get_event_target());
     m_events->remove_handler(EventType::STREAM_INPUT_FORMAT_ERROR, get_conn().get_event_target());
     m_events->remove_handler(EventType::FILE_KEEPALIVE, this);
-    m_events->remove_handler(EventType::CLIPBOARD_SENDING, this);
     m_events->remove_handler(EventType::TIMER, this);
 
     // remove timer
@@ -265,9 +263,9 @@ void ClientProxy1_6::handle_flatline()
     disconnect();
 }
 
-void ClientProxy1_6::handle_clipboard_sending_event(const Event& event)
+void ClientProxy1_6::send_clipboard_chunk(const ClipboardChunk& chunk)
 {
-    get_conn().send_clipboard_chunk_1_6(event.get_data_as<ClipboardChunk>());
+    get_conn().send_clipboard_chunk_1_6(chunk);
 }
 
 bool ClientProxy1_6::getClipboard(ClipboardID id, IClipboard* clipboard) const
@@ -315,10 +313,9 @@ void ClientProxy1_6::setClipboard(ClipboardID id, const IClipboard* clipboard)
 
         std::string data = m_clipboard[id].m_clipboard.marshall();
 
-        size_t size = data.size();
         LOG_DEBUG("sending clipboard %d to \"%s\"", id, getName().c_str());
 
-        StreamChunker::sendClipboard(data, size, id, 0, m_events, this);
+        m_clipboardSender.send(std::move(data), id, 0);
     }
 }
 
@@ -454,14 +451,14 @@ bool ClientProxy1_6::recvInfo()
 bool ClientProxy1_6::recvClipboard()
 {
     // parse message
-    static std::string dataCached;
+    auto& dataCached = m_clipboardReceiveData;
     ClipboardID id;
     std::uint32_t seq;
 
-    int r = ClipboardChunk::assemble(getStream(), dataCached, id, seq);
+    int r = ClipboardChunk::assemble(getStream(), dataCached, m_clipboardExpectedSize, id, seq);
 
     if (r == kStart) {
-        size_t size = ClipboardChunk::getExpectedSize();
+        size_t size = m_clipboardExpectedSize;
         LOG_DEBUG("receiving clipboard %d size=%zd", id, size);
     } else if (r == kFinish) {
         LOG_DEBUG("received client \"%s\" clipboard %d seqnum=%d, size=%zd",

@@ -18,6 +18,8 @@
 
 #pragma once
 
+#include "inputleap/ClipboardSender.h"
+
 #include "server/ClientProxy.h"
 #include "base/Fwd.h"
 #include "inputleap/Clipboard.h"
@@ -89,7 +91,7 @@ private:
     void handle_disconnect();
     void handle_write_error();
     void handle_flatline();
-    void handle_clipboard_sending_event(const Event& event);
+    void send_clipboard_chunk(const ClipboardChunk& chunk);
 
     bool recvInfo();
     bool recvGrabClipboard();
@@ -119,6 +121,9 @@ protected:
     double m_keepAliveRate;
     EventQueueTimer* m_keepAliveTimer;
     Server* m_server;
+    ClipboardSender m_clipboardSender;
+    std::string m_clipboardReceiveData;
+    std::size_t m_clipboardExpectedSize = 0;
 };
 
 } // namespace inputleap

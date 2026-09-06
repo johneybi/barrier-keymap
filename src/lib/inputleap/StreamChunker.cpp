@@ -105,49 +105,6 @@ void StreamChunker::sendFile(const char* filename, IEventQueue* events,
     s_isChunkingFile = false;
 }
 
-void StreamChunker::sendClipboard(std::string& data, std::size_t size, ClipboardID id,
-                                  std::uint32_t sequence, IEventQueue* events,
-                                  const EventTarget* event_target)
-{
-    // send first message (data size)
-    ClipboardChunk size_message = ClipboardChunk::start(id, sequence, size);
-
-    events->add_event(EventType::CLIPBOARD_SENDING, event_target,
-                      create_event_data<ClipboardChunk>(size_message));
-
-    // send clipboard chunk with a fixed size
-    size_t sentLength = 0;
-    size_t chunkSize = g_chunkSize;
-
-    while (true) {
-        events->add_event(EventType::FILE_KEEPALIVE, event_target);
-
-        // make sure we don't read too much from the mock data.
-        if (sentLength + chunkSize > size) {
-            chunkSize = size - sentLength;
-        }
-
-        std::string chunk(data.substr(sentLength, chunkSize).c_str(), chunkSize);
-        ClipboardChunk data_chunk = ClipboardChunk::data(id, sequence, chunk);
-
-        events->add_event(EventType::CLIPBOARD_SENDING, event_target,
-                          create_event_data<ClipboardChunk>(data_chunk));
-
-        sentLength += chunkSize;
-        if (sentLength == size) {
-            break;
-        }
-    }
-
-    // send last message
-    ClipboardChunk end = ClipboardChunk::end(id, sequence);
-
-    events->add_event(EventType::CLIPBOARD_SENDING, event_target,
-                      create_event_data<ClipboardChunk>(end));
-
-    LOG_DEBUG("sent clipboard size=%zd", sentLength);
-}
-
 void
 StreamChunker::interruptFile()
 {
