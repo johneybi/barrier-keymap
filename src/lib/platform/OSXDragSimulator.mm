@@ -28,33 +28,65 @@ NSWindow* g_dragWindow = nullptr;
 OSXDragView* g_dragView = nullptr;
 NSString* g_ext = nullptr;
 
+namespace {
+
+// The headless Cocoa application is still doing useful work while its input
+// service runs (including while reconnecting). AppKit must not auto-quit it
+// merely because it has no visible windows under memory pressure. This does
+// not prevent explicit Stop, SIGTERM, logout, sleep or an OS forced kill.
+class AutomaticTerminationGuard {
+public:
+    AutomaticTerminationGuard()
+    {
+        [[NSProcessInfo processInfo] disableAutomaticTermination:reason()];
+    }
+
+    ~AutomaticTerminationGuard()
+    {
+        [[NSProcessInfo processInfo] enableAutomaticTermination:reason()];
+    }
+
+    AutomaticTerminationGuard(const AutomaticTerminationGuard&) = delete;
+    AutomaticTerminationGuard& operator=(const AutomaticTerminationGuard&) = delete;
+
+private:
+    static NSString* reason() { return @"Input Leap input service is running"; }
+};
+
+} // namespace
+
 void
 runCocoaApp()
 {
-	NSAutoreleasePool* pool = [[NSAutoreleasePool alloc] init];
+    NSAutoreleasePool* pool = [[NSAutoreleasePool alloc] init];
 
-	[NSApplication sharedApplication];
+    {
+        // Acquire before AppKit initializes or runs its launch callbacks. The
+        // opt-out counter is tracked even if automatic termination is enabled later.
+        AutomaticTerminationGuard automaticTerminationGuard;
+        [NSApplication sharedApplication];
 
-    NSWindow* window = [[NSWindow alloc]
-						initWithContentRect: NSMakeRect(0, 0, 3, 3)
-						styleMask: NSBorderlessWindowMask
-						backing: NSBackingStoreBuffered
-						defer: NO];
-    [window setTitle: @""];
-	[window setAlphaValue:0.1];
-	[window makeKeyAndOrderFront:nil];
+        NSWindow* window = [[NSWindow alloc]
+                            initWithContentRect:NSMakeRect(0, 0, 3, 3)
+                            styleMask:NSBorderlessWindowMask
+                            backing:NSBackingStoreBuffered
+                            defer:NO];
+        [window setTitle:@""];
+        [window setAlphaValue:0.1];
+        [window makeKeyAndOrderFront:nil];
 
-	OSXDragView* dragView = [[OSXDragView alloc] initWithFrame:NSMakeRect(0, 0, 3, 3)];
+        OSXDragView* dragView = [[OSXDragView alloc] initWithFrame:NSMakeRect(0, 0, 3, 3)];
 
-	g_dragWindow = window;
-	g_dragView = dragView;
-	[window setContentView: dragView];
+        g_dragWindow = window;
+        g_dragView = dragView;
+        [window setContentView:dragView];
 
-	NSLog(@"starting cocoa loop");
-	[NSApp run];
+        NSLog(@"starting cocoa loop (automatic termination deferred)");
+        [NSApp run];
+    } // Balance the opt-out before draining the autorelease pool.
 
-	NSLog(@"cocoa: release");
-	[pool release];
+    NSLog(@"cocoa: release");
+    [pool release];
 }
 
 void
