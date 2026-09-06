@@ -59,10 +59,10 @@
 #endif
 
 #include <iostream>
+#include <algorithm>
 #include <stdio.h>
 #include <sstream>
 
-#define RETRY_TIME 1.0
 
 namespace inputleap {
 
@@ -199,31 +199,14 @@ void ClientApp::updateStatus(const std::string& msg)
 void
 ClientApp::resetRestartTimeout()
 {
-    // retry time can nolonger be changed
-    //s_retryTime = 0.0;
+    m_retryDelay = 1.0;
 }
 
 
 double
 ClientApp::nextRestartTimeout()
 {
-    // retry at a constant rate (Issue 52)
-    return RETRY_TIME;
-
-    /*
-    // choose next restart timeout.  we start with rapid retries
-    // then slow down.
-    if (s_retryTime < 1.0) {
-    s_retryTime = 1.0;
-    }
-    else if (s_retryTime < 3.0) {
-    s_retryTime = 3.0;
-    }
-    else {
-    s_retryTime = 5.0;
-    }
-    return s_retryTime;
-    */
+    return m_retryDelay;
 }
 
 
@@ -249,28 +232,46 @@ std::unique_ptr<Screen> ClientApp::open_client_screen()
 void
 ClientApp::handle_client_restart(const Event&, EventQueueTimer* timer)
 {
-    // discard old timer
-    m_events->remove_handler(EventType::TIMER, timer);
-    m_events->deleteTimer(timer);
+    if (timer != m_restartTimer) {
+        return;
+    }
+    cancelClientRestart();
 
     // reconnect
-    startClient();
+    if (!m_suspended) {
+        startClient();
+    }
 }
 
 
 void
 ClientApp::scheduleClientRestart(double retryTime)
 {
+    if (m_restartTimer != nullptr || m_suspended) {
+        return;
+    }
     // install a timer and handler to retry later
     LOG_DEBUG("retry in %.0f seconds", retryTime);
     EventQueueTimer* timer = m_events->newOneShotTimer(retryTime, nullptr);
+    m_restartTimer = timer;
+    m_retryDelay = std::min(m_retryDelay * 2.0, 30.0);
     m_events->add_handler(EventType::TIMER, timer,
                           [this, timer](const Event& event) { handle_client_restart(event, timer); });
 }
 
 
+void ClientApp::cancelClientRestart()
+{
+    if (m_restartTimer != nullptr) {
+        m_events->remove_handler(EventType::TIMER, m_restartTimer);
+        m_events->deleteTimer(m_restartTimer);
+        m_restartTimer = nullptr;
+    }
+}
+
 void ClientApp::handle_client_connected()
 {
+    cancelClientRestart();
     // using CLOG_PRINT here allows the GUI to see that the client is connected
     // regardless of which log level is set
     LOG_PRINT("connected to server");
@@ -408,6 +409,7 @@ ClientApp::startClient()
 void
 ClientApp::stopClient()
 {
+    cancelClientRestart();
     closeClient(m_client);
     m_client = nullptr;
     m_clientScreen.reset();

@@ -61,6 +61,7 @@ public:
     std::unique_ptr<Screen> open_client_screen();
     void handle_client_restart(const Event& event, EventQueueTimer* timer);
     void scheduleClientRestart(double retryTime);
+    void cancelClientRestart();
     void handle_client_connected();
     void handle_client_failed(const Event& e);
     void handle_client_disconnected();
@@ -82,6 +83,8 @@ private:
     Client* m_client;
     std::unique_ptr<inputleap::Screen> m_clientScreen;
     NetworkAddress* m_serverAddress;
+    EventQueueTimer* m_restartTimer = nullptr;
+    double m_retryDelay = 1.0;
 };
 
 } // namespace inputleap
