@@ -88,6 +88,21 @@ int main(int argc, char* argv[])
 
     QInputLeapApplication app(argc, argv);
 
+#if defined(Q_OS_MAC)
+    // Keep the lock alive for the GUI lifetime, including helper authorization.
+    const QString lockDir = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
+    if (lockDir.isEmpty() || !QDir().mkpath(lockDir)) {
+        qCritical("Cannot create Input Leap instance lock directory");
+        return 1;
+    }
+    QLockFile instanceLock(lockDir + QStringLiteral("/gui.lock"));
+    instanceLock.setStaleLockTime(0);
+    if (!instanceLock.tryLock(0)) {
+        qWarning("Input Leap GUI already running, or instance lock unavailable");
+        return instanceLock.error() == QLockFile::LockFailedError ? 0 : 1;
+    }
+#endif
+
 #if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
     app.setDesktopFileName(QStringLiteral("io.github.input_leap.input-leap"));
 #endif
