@@ -1,0 +1,64 @@
+*** Begin Patch
+*** Update File: src/lib/platform/OSXKeyState.h
+@@
+     void postHIDVirtualKey(const std::uint8_t virtualKeyCode, const bool postDown);
++    bool postKeyToFrontmostApplication(const std::uint8_t virtualKeyCode);
+*** Update File: src/lib/platform/OSXKeyState.cpp
+@@
+ void OSXKeyState::postHIDVirtualKey(const std::uint8_t virtualKeyCode, const bool postDown)
+ {
+@@
+     }
+ }
++
++bool OSXKeyState::postKeyToFrontmostApplication(const std::uint8_t virtualKeyCode)
++{
++    ProcessSerialNumber frontProcess = {0, kNoProcess};
++    if (GetFrontProcess(&frontProcess) != noErr) {
++        LOG_WARN("failed to find the frontmost macOS application for keycode=%u",
++                 static_cast<unsigned int>(virtualKeyCode));
++        return false;
++    }
++
++    pid_t frontPid = 0;
++    if (GetProcessPID(&frontProcess, &frontPid) != noErr || frontPid <= 0) {
++        LOG_WARN("failed to resolve the frontmost macOS application PID for keycode=%u",
++                 static_cast<unsigned int>(virtualKeyCode));
++        return false;
++    }
++
++    for (const bool keyDown : {true, false}) {
++        CGEventRef event = CGEventCreateKeyboardEvent(nullptr, virtualKeyCode, keyDown);
++        if (event == nullptr) {
++            LOG_WARN("failed to create focused key event keycode=%u down=%s",
++                     static_cast<unsigned int>(virtualKeyCode),
++                     keyDown ? "yes" : "no");
++            return false;
++        }
++        CGEventSetFlags(event, getModifierStateAsOSXFlags());
++        CGEventPostToPid(frontPid, event);
++        CFRelease(event);
++    }
++
++    LOG_INFO("posted keycode=%u to frontmost application pid=%d",
++             static_cast<unsigned int>(virtualKeyCode),
++             static_cast<int>(frontPid));
++    return true;
++}
+@@
+                 else {
+                     LOG_DEBUG1("passing F19 to active Gureum input method current=%s",
+                                currentId.c_str());
+-                    LOG_INFO("F19 sent to Gureum input method");
+-                    postHIDVirtualKey(kVK_F19, true);
+-                    postHIDVirtualKey(kVK_F19, false);
++                    if (postKeyToFrontmostApplication(kVK_F19)) {
++                        LOG_INFO("F19 sent to frontmost application's Gureum input session");
++                    }
++                    else {
++                        LOG_WARN("focused F19 delivery failed; falling back to HID event stream");
++                        postHIDVirtualKey(kVK_F19, true);
++                        postHIDVirtualKey(kVK_F19, false);
++                    }
+                 }
+*** End Patch

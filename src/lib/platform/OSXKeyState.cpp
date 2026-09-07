@@ -204,7 +204,6 @@ OSXKeyState::init()
     m_altPressed = false;
     m_superPressed = false;
     m_capsPressed = false;
-    m_gureumInputSourceActive = false;
 
     // build virtual key map
     for (size_t i = 0; i < sizeof(s_controlKeys) / sizeof(s_controlKeys[0]);
@@ -699,47 +698,20 @@ OSXKeyState::fakeKey(const Keystroke& keystroke)
             button, virtualKey, keyDown ? "down" : "up");
 
         // F19 is the dedicated macOS target for the Windows Right Alt tap.
-        // Select Gureum on the first F19 press, then let Gureum's own
-        // per-client composer handle subsequent Roman/Hangul toggles. Do not
-        // send F19 immediately after selecting han2: F19 is a toggle, and a
-        // correctly initialized han2 composer would toggle back to Roman.
+        // F19 is the remote Korean/English toggle. Do not synthesize F19 back
+        // into macOS: browser input methods can ignore synthetic function-key
+        // events even though the event reaches the foreground process. Select
+        // the concrete input source and wait until macOS reports it active.
         if (virtualKey == kVK_F19) {
             if (keyDown && !repeat) {
-                TISInputSourceRef current = runOnMainThread([]() {
-                    return TISCopyCurrentKeyboardInputSource();
-                });
-                const std::string currentId = getInputSourceString(
-                    current, kTISPropertyInputSourceID);
-                const bool gureumActive =
-                    currentId.find("org.youknowone.inputmethod.Gureum") !=
-                    std::string::npos;
-                LOG_INFO("F19 received current=%s trackedGureum=%s sourceGureum=%s",
-                         currentId.c_str(),
-                         m_gureumInputSourceActive ? "yes" : "no",
-                         gureumActive ? "yes" : "no");
-                if (current != nullptr) {
-                    CFRelease(current);
-                }
-                if (gureumActive) {
-                    m_gureumInputSourceActive = true;
-                }
-                if (!m_gureumInputSourceActive) {
-                    if (cycleInputSource(1)) {
-                        m_gureumInputSourceActive = true;
-                        // TISSelectInputSource returns before the active app's
-                        // input session has finished switching. Waiting here
-                        // prevents the first character from racing activation.
-                        LOG_DEBUG1("selected Gureum han2; waiting for input session activation");
-                        LOG_INFO("F19 selected Gureum han2; F19 toggle not sent");
-                        this_thread_sleep(0.075);
-                    }
+                if (cycleInputSource(1)) {
+                    LOG_INFO("F19 switched macOS input source and confirmed activation");
+                    // Give the foreground application's text-input session a
+                    // short window to consume the system source notification.
+                    this_thread_sleep(0.075);
                 }
                 else {
-                    LOG_DEBUG1("passing F19 to active Gureum input method current=%s",
-                               currentId.c_str());
-                    LOG_INFO("F19 sent to Gureum input method");
-                    postHIDVirtualKey(kVK_F19, true);
-                    postHIDVirtualKey(kVK_F19, false);
+                    LOG_WARN("F19 failed to switch macOS input source");
                 }
             }
             break;
@@ -1053,8 +1025,12 @@ void OSXKeyState::setGroup(std::int32_t group)
 bool OSXKeyState::cycleInputSource(std::int32_t offset)
 {
     const std::string abcId = "com.apple.keylayout.ABC";
+    const std::string gureumRomanId =
+        "org.youknowone.inputmethod.Gureum.system";
     const std::string gureumHangulId =
         "org.youknowone.inputmethod.Gureum.han2";
+    const std::string appleKoreanId =
+        "com.apple.inputmethod.Korean.2SetKorean";
 
     CFStringRef keys[] = { kTISPropertyInputSourceCategory };
     CFStringRef values[] = { kTISCategoryKeyboardInputSource };
@@ -1114,26 +1090,45 @@ bool OSXKeyState::cycleInputSource(std::int32_t offset)
         }
     }
 
-    // Gureum exposes more than one selectable input-source entry. Cycling the
-    // complete list can therefore land on Gureum's Roman mode in one direction
-    // and on its Hangul mode in the other. For the F19 toggle, prefer the two
-    // concrete sources the user actually wants and keep the generic fallback
-    // for other configurations.
+    // Keep both sides of the toggle inside Gureum when possible. Switching
+    // from Gureum han2 to Apple's ABC can leave Safari WebKit's marked-text
+    // session attached to the old input method, swallowing subsequent Roman
+    // keystrokes. Gureum.system is its enabled Roman mode and lets the same
+    // input-method session finish the composition cleanly.
     TISInputSourceRef target = nullptr;
     if (offset == 1) {
-        const std::string desiredId = currentId == gureumHangulId
-            ? abcId
-            : gureumHangulId;
-        for (TISInputSourceRef source : selectableSources) {
-            if (getInputSourceString(source, kTISPropertyInputSourceID) ==
-                desiredId) {
-                target = source;
-                break;
+        if (currentId == gureumHangulId || currentId == appleKoreanId) {
+            for (const std::string& desiredId : {gureumRomanId, abcId}) {
+                for (TISInputSourceRef source : selectableSources) {
+                    if (getInputSourceString(source, kTISPropertyInputSourceID) ==
+                        desiredId) {
+                        target = source;
+                        break;
+                    }
+                }
+                if (target != nullptr) {
+                    break;
+                }
+            }
+        }
+        else {
+            for (const std::string& desiredId : {gureumHangulId, appleKoreanId}) {
+                for (TISInputSourceRef source : selectableSources) {
+                    if (getInputSourceString(source, kTISPropertyInputSourceID) ==
+                        desiredId) {
+                        target = source;
+                        break;
+                    }
+                }
+                if (target != nullptr) {
+                    break;
+                }
             }
         }
         if (target != nullptr) {
             LOG_DEBUG1("selecting deterministic macOS input source current=%s target=%s",
-                       currentId.c_str(), desiredId.c_str());
+                       currentId.c_str(),
+                       getInputSourceString(target, kTISPropertyInputSourceID).c_str());
         }
     }
 
@@ -1159,7 +1154,29 @@ bool OSXKeyState::cycleInputSource(std::int32_t offset)
     }
     CFRelease(sources);
 
-    return status == noErr && targetId == gureumHangulId;
+    if (status != noErr) {
+        return false;
+    }
+
+    // TISSelectInputSource returns before activation is observable. Confirm
+    // the requested source instead of letting the next remote character race.
+    for (int attempt = 0; attempt < 8; ++attempt) {
+        TISInputSourceRef active = runOnMainThread([]() {
+            return TISCopyCurrentKeyboardInputSource();
+        });
+        const std::string activeId = getInputSourceString(
+            active, kTISPropertyInputSourceID);
+        if (active != nullptr) {
+            CFRelease(active);
+        }
+        if (activeId == targetId) {
+            return true;
+        }
+        this_thread_sleep(0.025);
+    }
+
+    LOG_WARN("macOS input source did not activate target=%s", targetId.c_str());
+    return false;
 }
 
 void

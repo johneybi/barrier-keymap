@@ -1,0 +1,37 @@
+*** Begin Patch
+*** Update File: src/lib/platform/OSXKeyState.cpp
+@@
+     const std::string abcId = "com.apple.keylayout.ABC";
++    const std::string gureumRomanId =
++        "org.youknowone.inputmethod.Gureum.system";
+     const std::string gureumHangulId =
+         "org.youknowone.inputmethod.Gureum.han2";
+@@
+-    // Prefer deterministic Roman/Hangul sources. Fall back to Apple's Korean
+-    // source if Gureum was disabled or removed from the enabled source list.
++    // Keep both sides of the toggle inside Gureum when possible. Switching
++    // from Gureum han2 to Apple's ABC can leave Safari WebKit's marked-text
++    // session attached to the old input method, swallowing subsequent Roman
++    // keystrokes. Gureum.system is its enabled Roman mode and lets the same
++    // input-method session finish the composition cleanly.
+     TISInputSourceRef target = nullptr;
+     if (offset == 1) {
+         if (currentId == gureumHangulId || currentId == appleKoreanId) {
+-            for (TISInputSourceRef source : selectableSources) {
+-                if (getInputSourceString(source, kTISPropertyInputSourceID) == abcId) {
+-                    target = source;
+-                    break;
++            for (const std::string& desiredId : {gureumRomanId, abcId}) {
++                for (TISInputSourceRef source : selectableSources) {
++                    if (getInputSourceString(source, kTISPropertyInputSourceID) ==
++                        desiredId) {
++                        target = source;
++                        break;
++                    }
++                }
++                if (target != nullptr) {
++                    break;
+                 }
+             }
+         }
+*** End Patch
