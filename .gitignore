@@ -40,3 +40,6 @@ bundle
 compile_commands.json
 # Cache (used by clangd)
 .cache
+
+# Local historical-source verification artifacts
+/build-recovery/

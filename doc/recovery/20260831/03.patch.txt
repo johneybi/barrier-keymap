@@ -1,0 +1,6 @@
+*** Begin Patch
+*** Update File: src/lib/platform/OSXKeyState.h
+@@
+-    // TISCopyCurrentKeyboardInputSource() is scoped to the client process,
+     void postUnicodeString(const std::u16string& str);
+*** End Patch
