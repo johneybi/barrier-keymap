@@ -14,6 +14,8 @@ app="$4"
 contents="$app/Contents"
 bundle_id="com.johneybi.input-leap-keymap.client"
 version="${INPUTLEAP_KEYMAP_VERSION:-3.0.3}"
+minimum_macos="${INPUTLEAP_MINIMUM_MACOS:-11.0}"
+source_revision="$(git rev-parse HEAD)"
 macdeployqt="${MACDEPLOYQT:-}"
 
 if [ -z "$macdeployqt" ]; then
@@ -61,7 +63,9 @@ cat > "$contents/Info.plist" <<EOF
     <key>CFBundleVersion</key>
     <string>$version</string>
     <key>LSMinimumSystemVersion</key>
-    <string>11.0</string>
+    <string>$minimum_macos</string>
+    <key>KeyStitchSourceRevision</key>
+    <string>$source_revision</string>
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSLocalNetworkUsageDescription</key>
