@@ -1,0 +1,21 @@
+diff --git a/OSXCore/InputReceiver.swift b/OSXCore/InputReceiver.swift
+--- a/OSXCore/InputReceiver.swift
++++ b/OSXCore/InputReceiver.swift
+@@ -78,6 +78,8 @@
+         InputMethodServer.shared.showOrHideCandidates(controller: controller)
+
++        let previousInputting = inputting
+         inputting = true
++        defer { inputting = previousInputting }
+
+         if result.action != .none {
+             cancelComposition()
+@@ -94,8 +96,6 @@
+             updateComposition() // 조합 중인 문자 반영
+         }
+
+-        inputting = false
+-
+         dlog(DEBUG_INPUT_RECEIVER, "*** End of Input handling ***")
+         return result
+     }
