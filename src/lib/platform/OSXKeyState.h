@@ -106,6 +106,11 @@ protected:
     virtual void getKeyMap(inputleap::KeyMap& keyMap);
     virtual void fakeKey(const Keystroke& keystroke);
 
+    void postHIDVirtualKey(std::uint8_t virtualKeyCode, bool postDown);
+    // Separate state accounting from OS delivery so tests can use an inert sink.
+    virtual void postKeyboardEvent(std::uint8_t virtualKeyCode, bool postDown,
+                                   CGEventFlags flags);
+
 private:
     class KeyResource;
     typedef std::vector<KeyLayout> GroupList;
@@ -152,11 +157,6 @@ private:
 
     void init();
 
-    // Post a key event to HID manager. It posts an event to HID client, a
-    // much lower level than window manager which's the target from carbon
-    // CGEventPost
-    void postHIDVirtualKey(const std::uint8_t virtualKeyCode, const bool postDown);
-
 private:
     // OS X uses a physical key if 0 for the 'A' key.  InputLeap reserves
     // KeyButton 0 so we offset all OS X physical key ids by this much
@@ -173,11 +173,8 @@ private:
     mutable std::uint32_t m_deadKeyState;
     GroupList m_groups;
     GroupMap m_groupMap;
-    bool m_shiftPressed;
-    bool m_controlPressed;
-    bool m_altPressed;
-    bool m_superPressed;
-    bool m_capsPressed;
+    // Physical sides must remain distinct when both sides of a modifier are held.
+    std::set<std::uint8_t> m_pressedModifiers;
     void postUnicodeString(const std::u16string& str);
     void postBackspace(int count);
 };

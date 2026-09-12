@@ -199,11 +199,7 @@ void
 OSXKeyState::init()
 {
     m_deadKeyState = 0;
-    m_shiftPressed = false;
-    m_controlPressed = false;
-    m_altPressed = false;
-    m_superPressed = false;
-    m_capsPressed = false;
+    m_pressedModifiers.clear();
 
     // build virtual key map
     for (size_t i = 0; i < sizeof(s_controlKeys) / sizeof(s_controlKeys[0]);
@@ -389,23 +385,23 @@ OSXKeyState::getModifierStateAsOSXFlags()
 {
     CGEventFlags modifiers = CGEventFlags(0);
 
-    if (m_shiftPressed) {
+    if (m_pressedModifiers.count(kVK_Shift) || m_pressedModifiers.count(kVK_RightShift)) {
         modifiers |= CGEventFlags(kCGEventFlagMaskShift);
     }
 
-    if (m_controlPressed) {
+    if (m_pressedModifiers.count(kVK_Control) || m_pressedModifiers.count(kVK_RightControl)) {
         modifiers |= CGEventFlags(kCGEventFlagMaskControl);
     }
 
-    if (m_altPressed) {
+    if (m_pressedModifiers.count(kVK_Option) || m_pressedModifiers.count(kVK_RightOption)) {
         modifiers |= CGEventFlags(kCGEventFlagMaskAlternate);
     }
 
-    if (m_superPressed) {
+    if (m_pressedModifiers.count(kVK_Command) || m_pressedModifiers.count(kVK_RightCommand)) {
         modifiers |= CGEventFlags(kCGEventFlagMaskCommand);
     }
 
-    if (m_capsPressed) {
+    if (m_pressedModifiers.count(kVK_CapsLock)) {
         modifiers |= CGEventFlags(kCGEventFlagMaskAlphaShift);
     }
 
@@ -628,28 +624,31 @@ void OSXKeyState::postHIDVirtualKey(const std::uint8_t virtualKeyCode, const boo
     {
     case kVK_Shift:
     case kVK_RightShift:
-        m_shiftPressed = postDown;
-        break;
     case kVK_Command:
     case kVK_RightCommand:
-        m_superPressed = postDown;
-        break;
     case kVK_Option:
     case kVK_RightOption:
-        m_altPressed = postDown;
-        break;
     case kVK_Control:
     case kVK_RightControl:
-        m_controlPressed = postDown;
-        break;
     case kVK_CapsLock:
-        m_capsPressed = postDown;
+        if (postDown) {
+            m_pressedModifiers.insert(virtualKeyCode);
+        }
+        else {
+            m_pressedModifiers.erase(virtualKeyCode);
+        }
         break;
     }
 
+    postKeyboardEvent(virtualKeyCode, postDown, getModifierStateAsOSXFlags());
+}
+
+void OSXKeyState::postKeyboardEvent(std::uint8_t virtualKeyCode, bool postDown,
+                                   CGEventFlags flags)
+{
     CGEventRef quartzEvent = CGEventCreateKeyboardEvent(nullptr, virtualKeyCode, postDown);
     if (quartzEvent != nullptr) {
-        CGEventSetFlags(quartzEvent, getModifierStateAsOSXFlags());
+        CGEventSetFlags(quartzEvent, flags);
         CGEventPost(kCGHIDEventTap, quartzEvent);
         CFRelease(quartzEvent);
     }

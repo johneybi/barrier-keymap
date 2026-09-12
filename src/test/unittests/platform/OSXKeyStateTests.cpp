@@ -25,6 +25,60 @@
 
 namespace inputleap {
 
+namespace {
+class InertOSXKeyState : public OSXKeyState {
+public:
+    InertOSXKeyState(IEventQueue* queue, KeyMap& map) : OSXKeyState(queue, map) {}
+    using OSXKeyState::postHIDVirtualKey;
+    CGEventFlags deliveredFlags = 0;
+    int deliveries = 0;
+protected:
+    void postKeyboardEvent(std::uint8_t, bool, CGEventFlags flags) override {
+        deliveredFlags = flags;
+        ++deliveries;
+    }
+};
+}
+
+TEST(OSXKeyStateTests, overlappingModifierSidesRemainActiveUntilBothReleased)
+{
+    struct Pair { std::uint8_t left, right; CGEventFlags flag; };
+    for (const auto& pair : {
+            Pair{kVK_Shift, kVK_RightShift, kCGEventFlagMaskShift},
+            Pair{kVK_Control, kVK_RightControl, kCGEventFlagMaskControl},
+            Pair{kVK_Option, kVK_RightOption, kCGEventFlagMaskAlternate},
+            Pair{kVK_Command, kVK_RightCommand, kCGEventFlagMaskCommand}}) {
+        for (bool releaseLeftFirst : {false, true}) {
+            KeyMap map;
+            MockEventQueue queue;
+            InertOSXKeyState keys(&queue, map);
+            keys.postHIDVirtualKey(pair.left, true);
+            keys.postHIDVirtualKey(pair.right, true);
+            keys.postHIDVirtualKey(releaseLeftFirst ? pair.left : pair.right, false);
+            EXPECT_EQ(pair.flag, keys.deliveredFlags);
+            keys.postHIDVirtualKey(kVK_ANSI_A, true);
+            EXPECT_EQ(pair.flag, keys.deliveredFlags);
+            keys.postHIDVirtualKey(kVK_ANSI_A, false);
+            keys.postHIDVirtualKey(releaseLeftFirst ? pair.right : pair.left, false);
+            EXPECT_EQ(0u, keys.deliveredFlags);
+            EXPECT_EQ(6, keys.deliveries);
+        }
+    }
+}
+
+TEST(OSXKeyStateTests, duplicateModifierDownAndUnmatchedOppositeUpDoNotClearHeldKey)
+{
+    KeyMap map;
+    MockEventQueue queue;
+    InertOSXKeyState keys(&queue, map);
+    keys.postHIDVirtualKey(kVK_RightOption, true);
+    keys.postHIDVirtualKey(kVK_RightOption, true);
+    keys.postHIDVirtualKey(kVK_Option, false);
+    EXPECT_EQ(kCGEventFlagMaskAlternate, keys.deliveredFlags);
+    keys.postHIDVirtualKey(kVK_RightOption, false);
+    EXPECT_EQ(0u, keys.deliveredFlags);
+}
+
 TEST(OSXKeyStateTests, mapModifiersFromOSX_OSXMask)
 {
     inputleap::KeyMap keyMap;
