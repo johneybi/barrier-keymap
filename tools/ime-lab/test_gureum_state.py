@@ -47,9 +47,14 @@ protocol IMKTextInput {
 }
 protocol IMKUnicodeTextInput {}
 final class Client: NSObject, IMKTextInput, IMKUnicodeTextInput {
+    var inserted: [String] = []
+    var onInsert: (() -> Void)?
     func selectedRange() -> NSRange { NSRange(location: 0, length: 0) }
     func markedRange() -> NSRange { NSRange(location: NSNotFound, length: 0) }
-    func insertText(_ text: String, replacementRange: NSRange) {}
+    func insertText(_ text: String, replacementRange: NSRange) {
+        inserted.append(text)
+        onInsert?()
+    }
 }
 final class Controller {
     let textClient = Client()
@@ -58,11 +63,16 @@ final class Controller {
 }
 final class Composer {
     var result = InputResult(processed: true, action: .none)
+    var pendingCommit = ""
     func filterCommand(keyCode: KeyCode, modifiers: NSEvent.ModifierFlags,
                        client: IMKTextInput & IMKUnicodeTextInput) -> InputEvent? { nil }
     func input(text: String?, key: KeyCode, modifiers: NSEvent.ModifierFlags,
                client: IMKTextInput & IMKUnicodeTextInput) -> InputResult { result }
-    func dequeueCommitString() -> String { "" }
+    func dequeueCommitString() -> String {
+        let text = pendingCommit
+        pendingCommit = ""
+        return text
+    }
 }
 final class InputMethodServer {
     static let shared = InputMethodServer()
@@ -108,6 +118,26 @@ for (name, flags, text, action) in [
               "\(name): subsequent commit classification initial=\(initial)")
     }
 }
+// A real nested call of the extracted input method during an inert insertText
+// callback. This tests scope restoration, not whether Safari makes this call.
+for action in [InputAction.none, InputAction.commit] {
+    let receiver = Receiver()
+    let client = receiver.controller.client()
+    receiver.composer.result.action = action
+    receiver.composer.pendingCommit = "fixture"
+    var nestedCalls = 0
+    client.onInsert = {
+        nestedCalls += 1
+        receiver.composer.result.action = .none
+        _ = receiver.input(text: "a", key: .a, modifiers: [], client: client)
+        check(receiver.inputting, "nested input preserves outer processing scope action=\(action)")
+    }
+    _ = receiver.input(text: "a", key: .a, modifiers: [], client: client)
+    check(!receiver.inputting, "outer input restores idle state action=\(action)")
+    check(nestedCalls == 1, "single nested callback action=\(action)")
+    check(client.inserted == ["fixture"], "commit text inserted exactly once action=\(action)")
+    client.onInsert = nil
+}
 exit(failures == 0 ? 0 : 1)
 '''
 
@@ -133,7 +163,7 @@ with tempfile.TemporaryDirectory(prefix="keystitch-ime-state-") as directory:
             raise SystemExit(f"Unexpected {name} result: {result.returncode}\n{result.stderr}")
         passes = sum(line.startswith("PASS ") for line in result.stdout.splitlines())
         failures = sum(line.startswith("FAIL ") for line in result.stdout.splitlines())
-        if (passes, failures) != ((20, 0) if should_pass else (10, 10)):
+        if (passes, failures) != ((28, 0) if should_pass else (16, 12)):
             raise SystemExit(f"Unexpected assertion counts for {name}: {passes}, {failures}")
-print("Regression reproduced in upstream; scoped-state candidate passes 20 assertions.")
+print("Regression reproduced in upstream; scoped-state candidate passes 28 assertions.")
 print("This does NOT establish Safari/IMK integration correctness.")

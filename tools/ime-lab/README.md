@@ -33,12 +33,17 @@ used only to obtain the public upstream fixture. The test runner is offline.
 
 Verified on 2026-09-12:
 
-- Original: 10 of 20 assertions fail (expected regression demonstration).
-- Candidate: 20 of 20 assertions pass.
+- Original: 12 of 28 assertions fail (expected regression demonstration).
+- Candidate: 28 of 28 assertions pass.
 - `git apply --check` passes on the fixed upstream commit.
 - Cases: Control, Command, nil text, composer-requested commit and ordinary
   text, with both initial processing states. Each checks restoration and the
   subsequent external-commit cancellation branch.
+- Extended coverage invokes the actual extracted input method recursively from
+  an inert insertion callback. Both normal and early-commit outer paths preserve
+  the outer processing scope and insert the fixture commit exactly once. This
+  supersedes the initial 20-assertion test; it does not establish that Safari
+  exercises the same callback sequence.
 
 The original early `.commit` return leaves `inputting` true. The candidate uses
 `defer` to restore the entry value on every exit from the processing scope,
@@ -109,8 +114,11 @@ Additional offline checks on 2026-09-12: shell syntax, Info.plist validation,
 Swift build and ad-hoc signature verification passed. The existing
 `build-stability/bin/unittests` ran 26 targeted tests successfully using
 `ClientRestartTests.*:ClipboardSenderTests.*:KeyRemapperTests.*:OSXKeyStateTests.*`.
-No production source changed, so this reused the existing test binary rather
+At the initial lab-only commit no production source changed, so this reused the existing test binary rather
 than claiming a fresh full Input Leap build or a complete-suite pass.
+
+See [offline review](../../doc/ime-offline-review-20260912.md) for the subsequent
+source fix and expanded Input Leap pipeline tests, still without installation.
 
 ## Next decision
 

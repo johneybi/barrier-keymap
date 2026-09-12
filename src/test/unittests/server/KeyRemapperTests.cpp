@@ -20,12 +20,203 @@
 
 #include "server/Config.h"
 #include "server/KeyRemapper.h"
+#include "inputleap/KeyState.h"
+#include "test/mock/inputleap/MockEventQueue.h"
 
 #include "test/global/gtest.h"
 
 #include <sstream>
+#include <algorithm>
 
 using namespace inputleap;
+
+namespace {
+
+// Real remapper -> real KeyState/KeyMap -> in-memory platform boundary.
+// Never constructs OSXKeyState, polls hardware, posts CGEvents or calls TIS.
+class RecordingKeyState : public KeyState {
+public:
+    static constexpr KeyButton f19 = 81; // macOS virtual key + 1
+    static constexpr KeyButton letterA = 1;
+    static constexpr KeyButton letterB = 12;
+    static constexpr KeyButton superRight = 55;
+    static constexpr KeyButton shiftLeft = 57;
+    KeyMap::Keystrokes strokes;
+    std::int32_t group = 0;
+    explicit RecordingKeyState(IEventQueue* events) : KeyState(events) { updateKeyMap(); }
+    std::int32_t pollActiveGroup() const override { return group; }
+    KeyModifierMask pollActiveModifiers() const override { return 0; }
+    void pollPressedKeys(KeyButtonSet&) const override {}
+    bool fakeCtrlAltDel() override { return false; }
+    bool fakeMediaKey(KeyID) override { return false; }
+    void relay(const KeyRemapper::KeyEventList& events) {
+        for (const auto& event : events) {
+            switch (event.m_type) {
+            case KeyRemapper::KeyEvent::kDown:
+                fakeKeyDown(event.m_id, event.m_mask, event.m_button); break;
+            case KeyRemapper::KeyEvent::kUp:
+                fakeKeyUp(event.m_button); break;
+            case KeyRemapper::KeyEvent::kRepeat:
+                fakeKeyRepeat(event.m_id, event.m_mask, event.m_count, event.m_button); break;
+            }
+        }
+    }
+    int presses(KeyButton button) const {
+        return std::count_if(strokes.begin(), strokes.end(), [button](const auto& key) {
+            return key.m_type == KeyMap::Keystroke::kButton &&
+                key.m_data.m_button.m_button == button && key.m_data.m_button.m_press;
+        });
+    }
+    int groupChanges() const {
+        return std::count_if(strokes.begin(), strokes.end(), [](const auto& key) {
+            return key.m_type == KeyMap::Keystroke::kGroup;
+        });
+    }
+protected:
+    void fakeKey(const Keystroke& key) override {
+        strokes.push_back(key);
+        if (key.m_type == Keystroke::kGroup && key.m_data.m_group.m_absolute)
+            group = key.m_data.m_group.m_group;
+    }
+    void getKeyMap(KeyMap& map) override {
+        auto add = [&](KeyID id, KeyButton button, int group, KeyModifierMask sensitive = 0) {
+            KeyMap::KeyItem item{};
+            item.m_id = id;
+            item.m_button = button;
+            item.m_group = group;
+            item.m_sensitive = sensitive;
+            KeyMap::initModifierKey(item);
+            map.addKeyEntry(item);
+        };
+        for (int g = 0; g < 2; ++g) {
+            add(kKeyF19, f19, g);
+            add(kKeySuper_R, superRight, g);
+            add(kKeyShift_L, shiftLeft, g);
+            add('a', letterA, g, KeyModifierShift);
+        }
+        // Deliberately unavailable in group zero: exposes temporary layout writes.
+        add('b', letterB, 1, KeyModifierShift);
+    }
+};
+
+class KeyRemapPipelineTests : public ::testing::Test {
+protected:
+    ::testing::NiceMock<MockEventQueue> events;
+    RecordingKeyState keys{&events};
+    KeyRemapper remapper;
+    const KeyButton remoteAlt = 100;
+    const KeyButton remoteLetter = 101;
+    const KeyButton remoteShift = 102;
+    void SetUp() override {
+        KeyRemapConfig config;
+        config.addTapRule("mac", kKeyAlt_R, kKeyF19, kKeySuper_R);
+        config.addTapRule("mac", kKeyHangul, kKeyF19, kKeySuper_R);
+        remapper.setConfig(config);
+    }
+    void down(KeyID id, KeyModifierMask mask, KeyButton button) {
+        keys.relay(remapper.remapKeyDown("mac", id, mask, button));
+    }
+    void up(KeyID id, KeyModifierMask mask, KeyButton button) {
+        keys.relay(remapper.remapKeyUp("mac", id, mask, button));
+    }
+    void tap(KeyID id, KeyModifierMask mask) {
+        down(id, mask, remoteAlt); up(id, mask, remoteAlt);
+    }
+    void assertReleased() {
+        EXPECT_EQ(0u, keys.getActiveModifiers());
+        for (KeyButton button : {RecordingKeyState::f19, RecordingKeyState::letterA,
+                RecordingKeyState::letterB, RecordingKeyState::superRight, RecordingKeyState::shiftLeft})
+            EXPECT_EQ(0, keys.getKeyState(button));
+    }
+};
+
+TEST_F(KeyRemapPipelineTests, RepeatedRightAltAndHangulTapsKeepFirstLetterAndReleaseState)
+{
+    for (KeyID source : {kKeyAlt_R, kKeyHangul}) {
+        const KeyModifierMask mask = source == kKeyAlt_R ? KeyModifierAlt : 0;
+        for (int i = 0; i < 32; ++i) {
+            keys.strokes.clear();
+            tap(source, mask);
+            down('a', 0, remoteLetter); up('a', 0, remoteLetter);
+            ASSERT_EQ(4u, keys.strokes.size());
+            for (const auto& stroke : keys.strokes)
+                ASSERT_EQ(KeyMap::Keystroke::kButton, stroke.m_type);
+            EXPECT_EQ(RecordingKeyState::f19, keys.strokes[0].m_data.m_button.m_button);
+            EXPECT_TRUE(keys.strokes[0].m_data.m_button.m_press);
+            EXPECT_FALSE(keys.strokes[1].m_data.m_button.m_press);
+            EXPECT_EQ(RecordingKeyState::letterA, keys.strokes[2].m_data.m_button.m_button);
+            EXPECT_EQ(1, keys.presses(RecordingKeyState::letterA));
+            EXPECT_EQ(0, keys.groupChanges());
+            assertReleased();
+        }
+    }
+}
+
+TEST_F(KeyRemapPipelineTests, TimeoutHoldIsModifierNotToggle)
+{
+    down(kKeyAlt_R, KeyModifierAlt, remoteAlt);
+    for (const auto& screen : remapper.flushPendingTapHolds()) keys.relay(screen.second);
+    EXPECT_EQ(KeyModifierSuper, keys.getActiveModifiers());
+    down('a', KeyModifierAlt, remoteLetter); up('a', KeyModifierAlt, remoteLetter);
+    up(kKeyAlt_R, 0, remoteAlt);
+    EXPECT_EQ(0, keys.presses(RecordingKeyState::f19));
+    EXPECT_EQ(1, keys.presses(RecordingKeyState::letterA));
+    assertReleased();
+}
+
+TEST_F(KeyRemapPipelineTests, LetterBeforeReleaseFlushesHoldNotToggle)
+{
+    down(kKeyAlt_R, KeyModifierAlt, remoteAlt);
+    down('a', KeyModifierAlt, remoteLetter);
+    EXPECT_EQ(KeyModifierSuper, keys.getActiveModifiers());
+    up('a', KeyModifierAlt, remoteLetter); up(kKeyAlt_R, 0, remoteAlt);
+    EXPECT_EQ(0, keys.presses(RecordingKeyState::f19));
+    EXPECT_EQ(1, keys.presses(RecordingKeyState::letterA));
+    assertReleased();
+}
+
+TEST_F(KeyRemapPipelineTests, ShiftHeldAcrossTapIsRestoredAndReleased)
+{
+    down(kKeyShift_L, KeyModifierShift, remoteShift);
+    tap(kKeyAlt_R, KeyModifierAlt | KeyModifierShift);
+    EXPECT_EQ(1, keys.presses(RecordingKeyState::f19));
+    EXPECT_EQ(KeyModifierShift, keys.getActiveModifiers());
+    up(kKeyShift_L, 0, remoteShift);
+    down('a', 0, remoteLetter); up('a', 0, remoteLetter);
+    EXPECT_EQ(1, keys.presses(RecordingKeyState::letterA));
+    assertReleased();
+}
+
+TEST_F(KeyRemapPipelineTests, FirstLetterInAnotherGroupEmitsOverrideAndRestore)
+{
+    tap(kKeyAlt_R, KeyModifierAlt);
+    keys.strokes.clear();
+    down('b', 0, remoteLetter); up('b', 0, remoteLetter);
+    ASSERT_EQ(4u, keys.strokes.size());
+    ASSERT_EQ(KeyMap::Keystroke::kGroup, keys.strokes[0].m_type);
+    EXPECT_EQ(1, keys.strokes[0].m_data.m_group.m_group);
+    EXPECT_FALSE(keys.strokes[0].m_data.m_group.m_restore);
+    ASSERT_EQ(KeyMap::Keystroke::kButton, keys.strokes[1].m_type);
+    ASSERT_EQ(KeyMap::Keystroke::kGroup, keys.strokes[2].m_type);
+    EXPECT_EQ(0, keys.strokes[2].m_data.m_group.m_group);
+    EXPECT_TRUE(keys.strokes[2].m_data.m_group.m_restore);
+    EXPECT_EQ(0, keys.group);
+    assertReleased();
+}
+
+TEST_F(KeyRemapPipelineTests, DisconnectCleanupReleasesHeldModifier)
+{
+    down(kKeyAlt_R, KeyModifierAlt, remoteAlt);
+    for (const auto& screen : remapper.flushPendingTapHolds()) keys.relay(screen.second);
+    keys.fakeAllKeysUp();
+    remapper.resetScreen("mac");
+    assertReleased();
+    tap(kKeyAlt_R, KeyModifierAlt);
+    EXPECT_EQ(1, keys.presses(RecordingKeyState::f19));
+    assertReleased();
+}
+
+} // namespace
 
 namespace {
 
