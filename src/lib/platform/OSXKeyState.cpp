@@ -53,17 +53,6 @@ static auto runOnMainThread(Func&& func) -> decltype(func())
     return result;
 }
 
-static void runOnMainThreadVoid(std::function<void()> func)
-{
-    if (pthread_main_np()) {
-        func();
-        return;
-    }
-    dispatch_sync(dispatch_get_main_queue(), ^{
-        func();
-    });
-}
-
 static std::string getInputSourceString(TISInputSourceRef source, CFStringRef property)
 {
     if (source == nullptr) {
@@ -696,17 +685,14 @@ OSXKeyState::fakeKey(const Keystroke& keystroke)
             "  button=0x%04x virtualKey=0x%04x keyDown=%s",
             button, virtualKey, keyDown ? "down" : "up");
 
-        // F19 is the dedicated macOS target for the Windows Right Alt tap.
-        // F19 is the remote Korean/English toggle. Do not synthesize F19 back
-        // into macOS: browser input methods can ignore synthetic function-key
-        // events even though the event reaches the foreground process. Select
-        // the concrete input source and wait until macOS reports it active.
+        // Preserve the current F19 policy while investigating IME failures.
+        // Observing the selected source does not confirm that the foreground
+        // application's composition or input-method session has switched.
         if (virtualKey == kVK_F19) {
             if (keyDown && !repeat) {
                 if (cycleInputSource(1)) {
-                    LOG_INFO("F19 switched macOS input source and confirmed activation");
-                    // Give the foreground application's text-input session a
-                    // short window to consume the system source notification.
+                    LOG_INFO("F19 selected macOS input source (foreground IME state unverified)");
+                    // Historical settling interval, not an IME acknowledgement.
                     this_thread_sleep(0.075);
                 }
                 else {
@@ -724,7 +710,8 @@ OSXKeyState::fakeKey(const Keystroke& keystroke)
     case Keystroke::kGroup: {
         std::int32_t group = keystroke.m_data.m_group.m_group;
         if (keystroke.m_data.m_group.m_absolute) {
-            LOG_DEBUG1("  group %d", group);
+            LOG_DEBUG1("  keyboard layout override group=%d restore=%s", group,
+                       keystroke.m_data.m_group.m_restore ? "yes" : "no");
             setGroup(group);
         }
         else {
@@ -1013,9 +1000,15 @@ void OSXKeyState::setGroup(std::int32_t group)
     TISInputSourceRef target = m_groups[group];
     const std::string targetId = getInputSourceString(
         target, kTISPropertyInputSourceID);
-    runOnMainThreadVoid([&]() {
-        TISSetInputMethodKeyboardLayoutOverride(target);
+    const OSStatus status = runOnMainThread([&]() {
+        return TISSetInputMethodKeyboardLayoutOverride(target);
     });
+
+    if (status != noErr) {
+        LOG_WARN("macOS keyboard layout override failed group=%d target=%s status=%d",
+                 group, targetId.c_str(), static_cast<int>(status));
+        return;
+    }
 
     LOG_DEBUG1("set macOS keyboard layout group=%d target=%s",
                group, targetId.c_str());
@@ -1089,11 +1082,9 @@ bool OSXKeyState::cycleInputSource(std::int32_t offset)
         }
     }
 
-    // Keep both sides of the toggle inside Gureum when possible. Switching
-    // from Gureum han2 to Apple's ABC can leave Safari WebKit's marked-text
-    // session attached to the old input method, swallowing subsequent Roman
-    // keystrokes. Gureum.system is its enabled Roman mode and lets the same
-    // input-method session finish the composition cleanly.
+    // Historical source preference. It differs from Gureum's configurable
+    // last Roman mode and is not proof of correct composition finalization.
+    // Keep the selection policy unchanged pending isolated IME validation.
     TISInputSourceRef target = nullptr;
     if (offset == 1) {
         if (currentId == gureumHangulId || currentId == appleKoreanId) {
